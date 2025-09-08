@@ -433,10 +433,89 @@
 
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
+            // Load data from local storage first
+            const dataLoaded = loadFromLocalStorage();
+            if (dataLoaded) {
+                console.log('Previous data restored from browser storage');
+            } else {
+                // Add some sample data for testing
+                addSampleData();
+            }
+            
+            // Enable auto-save for free data persistence
+            enableAutoSave();
+            
             updateTime();
             setInterval(updateTime, 1000);
             getCurrentLocation();
         });
+
+        function addSampleData() {
+            // Add some sample attendance data for testing
+            const today = new Date();
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            
+            const todayString = today.toDateString();
+            const yesterdayString = yesterday.toDateString();
+            
+            // Sample attendance for EMP001
+            attendanceData['EMP001'] = {
+                [todayString]: {
+                    checkIn: '09:15:00',
+                    checkOut: '18:30:00',
+                    checkInLocation: { latitude: 26.8467, longitude: 80.9462, accuracy: 20 },
+                    checkOutLocation: { latitude: 26.8467, longitude: 80.9462, accuracy: 25 },
+                    isLate: true,
+                    date: todayString
+                },
+                [yesterdayString]: {
+                    checkIn: '08:45:00',
+                    checkOut: '17:45:00',
+                    checkInLocation: { latitude: 26.8467, longitude: 80.9462, accuracy: 15 },
+                    checkOutLocation: { latitude: 26.8467, longitude: 80.9462, accuracy: 18 },
+                    isLate: false,
+                    date: yesterdayString
+                }
+            };
+
+            // Sample attendance for EMP002
+            attendanceData['EMP002'] = {
+                [todayString]: {
+                    checkIn: '08:30:00',
+                    checkOut: '17:30:00',
+                    checkInLocation: { latitude: 26.8500, longitude: 80.9500, accuracy: 12 },
+                    checkOutLocation: { latitude: 26.8500, longitude: 80.9500, accuracy: 15 },
+                    isLate: false,
+                    date: todayString
+                }
+            };
+
+            // Sample leave data
+            leaveData['EMP003'] = [
+                {
+                    id: Date.now(),
+                    type: 'sick',
+                    fromDate: '2025-09-10',
+                    toDate: '2025-09-12',
+                    reason: 'Medical consultation',
+                    status: 'Pending',
+                    appliedOn: '2025-09-08'
+                }
+            ];
+
+            leaveData['EMP001'] = [
+                {
+                    id: Date.now() + 1,
+                    type: 'casual',
+                    fromDate: '2025-09-15',
+                    toDate: '2025-09-15',
+                    reason: 'Personal work',
+                    status: 'Approved',
+                    appliedOn: '2025-09-05'
+                }
+            ];
+        }
 
         function login() {
             const empId = document.getElementById('employeeId').value;
