@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Employee Attendance Management System</title>
     <style>
+        /* Existing CSS remains unchanged */
         * {
             margin: 0;
             padding: 0;
@@ -131,11 +132,6 @@
             background: linear-gradient(135deg, #06d6a0 0%, #118a7e 100%);
         }
 
-        .btn-warning {
-            background: linear-gradient(135deg, #ffd166 0%, #ffb74d 100%);
-            color: #333;
-        }
-
         .attendance-card {
             background: white;
             border-radius: 15px;
@@ -252,23 +248,6 @@
             border: 1px solid #f5c6cb;
         }
 
-        .admin-controls {
-            display: flex;
-            gap: 10px;
-            margin: 10px 0;
-        }
-
-        .admin-panel {
-            margin-top: 20px;
-        }
-
-        .admin-section {
-            margin-bottom: 30px;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 10px;
-        }
-
         @media (max-width: 768px) {
             .container {
                 width: 95%;
@@ -286,10 +265,29 @@
             .time-display {
                 font-size: 36px;
             }
+        }
 
-            .admin-controls {
-                flex-direction: column;
-            }
+        /* Admin specific styles */
+        .admin-section {
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 15px;
+            margin-top: 20px;
+        }
+        .admin-section h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+        .admin-section .form-group {
+            margin-bottom: 15px;
+        }
+        .admin-section .btn {
+            margin-right: 10px;
+        }
+        .admin-table-container {
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 20px;
         }
     </style>
 </head>
@@ -336,8 +334,7 @@
                 <button class="nav-tab" onclick="showTab('attendance')">Mark Attendance</button>
                 <button class="nav-tab" onclick="showTab('leave')">Leave Management</button>
                 <button class="nav-tab" onclick="showTab('records')">My Records</button>
-                <!-- Admin tab only shown for admin users -->
-                <button id="adminTab" class="nav-tab hidden" onclick="showTab('admin')">Admin Panel</button>
+                <button class="nav-tab hidden" id="adminTab" onclick="showTab('admin')">Admin Panel</button>
                 <button class="nav-tab" onclick="logout()" style="margin-left: auto; background: #ff6b6b; color: white;">Logout</button>
             </div>
 
@@ -360,6 +357,10 @@
                     <div class="stat-card">
                         <div class="stat-number" id="lateMarks">0</div>
                         <div class="stat-label">Late Marks</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="halfDays">0</div>
+                        <div class="stat-label">Half Days</div>
                     </div>
                 </div>
                 
@@ -446,43 +447,52 @@
             <!-- Admin Panel Tab -->
             <div id="admin" class="tab-pane">
                 <h2>Admin Panel</h2>
-                <div class="admin-controls">
-                    <button class="btn" onclick="loadAllEmployees()">Refresh Data</button>
-                    <button class="btn btn-success" onclick="exportToSheets()">Export to Google Sheets</button>
-                    <button class="btn btn-warning" onclick="importFromSheets()">Import from Google Sheets</button>
+                <div class="admin-section">
+                    <h3>Manage Employees</h3>
+                    <div class="form-group">
+                        <label>Employee ID:</label>
+                        <input type="text" id="newEmployeeId" placeholder="e.g., EMP004">
+                    </div>
+                    <div class="form-group">
+                        <label>Employee Name:</label>
+                        <input type="text" id="newEmployeeName" placeholder="e.g., Alice Brown">
+                    </div>
+                    <div class="form-group">
+                        <label>Password:</label>
+                        <input type="password" id="newEmployeePassword" placeholder="Set initial password">
+                    </div>
+                    <button class="btn btn-success" onclick="addEmployee()">Add Employee</button>
+                    <button class="btn btn-danger" onclick="deleteEmployee()">Delete Employee</button>
+                    <div id="employeeManagementMessage"></div>
                 </div>
 
-                <div class="admin-panel">
-                    <div class="admin-section">
-                        <h3>All Employees Attendance</h3>
-                        <div id="allEmployeesData"></div>
+                <div class="admin-section">
+                    <h3>View All Attendance Records</h3>
+                    <div class="form-group">
+                        <label>Filter by Employee ID (optional):</label>
+                        <input type="text" id="filterEmployeeIdAttendance" onkeyup="viewAllAttendanceRecords()">
                     </div>
+                    <button class="btn" onclick="viewAllAttendanceRecords()">Refresh Attendance</button>
+                    <div class="admin-table-container" id="allAttendanceRecords"></div>
+                </div>
 
-                    <div class="admin-section">
-                        <h3>Pending Leave Requests</h3>
-                        <div id="pendingLeaves"></div>
+                <div class="admin-section">
+                    <h3>Manage Leave Requests</h3>
+                    <div class="form-group">
+                        <label>Filter by Employee ID (optional):</label>
+                        <input type="text" id="filterEmployeeIdLeave" onkeyup="viewAllLeaveRequests()">
                     </div>
-
-                    <div class="admin-section">
-                        <h3>Employee Management</h3>
-                        <div class="form-group">
-                            <label>Add New Employee:</label>
-                            <input type="text" id="newEmpId" placeholder="Employee ID">
-                            <input type="text" id="newEmpName" placeholder="Employee Name">
-                            <input type="password" id="newEmpPassword" placeholder="Password">
-                            <button class="btn" onclick="addEmployee()">Add Employee</button>
-                        </div>
-                        <div id="employeeManagementMessage"></div>
-                    </div>
+                    <button class="btn" onclick="viewAllLeaveRequests()">Refresh Leave Requests</button>
+                    <div class="admin-table-container" id="allLeaveRequests"></div>
                 </div>
             </div>
         </div>
     </div>
 
     <script>
-        // Sample employee data including admin
+        // Sample employee data
         const employees = {
-            'ADMIN': { name: 'System Administrator', password: 'admin123', isAdmin: true },
+            'ADMIN': { name: 'Administrator', password: 'admin123', isAdmin: true },
             'EMP001': { name: 'John Doe', password: 'password123' },
             'EMP002': { name: 'Jane Smith', password: 'pass456' },
             'EMP003': { name: 'Mike Johnson', password: 'mike789' }
@@ -493,15 +503,6 @@
         let leaveData = {};
         let currentEmployee = null;
         let userLocation = null;
-        let isAdmin = false;
-
-        // Google Sheets configuration
-        const SHEET_ID = 'YOUR_GOOGLE_SHEET_ID_HERE'; // Replace with your Google Sheet ID
-        const SHEET_NAMES = {
-            EMPLOYEES: 'Employees',
-            ATTENDANCE: 'Attendance',
-            LEAVES: 'Leaves'
-        };
 
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
@@ -510,17 +511,53 @@
             if (dataLoaded) {
                 console.log('Previous data restored from browser storage');
             } else {
-                // Add some sample data for testing
+                // Add some sample data for testing if no data is found in local storage
                 addSampleData();
             }
             
-            // Enable auto-save for free data persistence
+            // Enable auto-save for data persistence
             enableAutoSave();
             
             updateTime();
             setInterval(updateTime, 1000);
             getCurrentLocation();
         });
+
+        // --- Local Storage Functions ---
+        function saveToLocalStorage() {
+            localStorage.setItem('employeesData', JSON.stringify(employees));
+            localStorage.setItem('attendanceData', JSON.stringify(attendanceData));
+            localStorage.setItem('leaveData', JSON.stringify(leaveData));
+            console.log('Data saved to local storage.');
+        }
+
+        function loadFromLocalStorage() {
+            const storedEmployees = localStorage.getItem('employeesData');
+            const storedAttendance = localStorage.getItem('attendanceData');
+            const storedLeave = localStorage.getItem('leaveData');
+
+            if (storedEmployees) {
+                Object.assign(employees, JSON.parse(storedEmployees)); // Merge with initial sample data
+            }
+            if (storedAttendance) {
+                attendanceData = JSON.parse(storedAttendance);
+            }
+            if (storedLeave) {
+                leaveData = JSON.parse(storedLeave);
+            }
+
+            // Check if any data was loaded
+            return storedEmployees || storedAttendance || storedLeave;
+        }
+
+        function enableAutoSave() {
+            // Save data every 5 seconds
+            setInterval(saveToLocalStorage, 5000); 
+            // Also save before the user closes the tab/browser
+            window.addEventListener('beforeunload', saveToLocalStorage);
+        }
+        // --- End Local Storage Functions ---
+
 
         function addSampleData() {
             // Add some sample attendance data for testing
@@ -539,6 +576,7 @@
                     checkInLocation: { latitude: 26.8467, longitude: 80.9462, accuracy: 20 },
                     checkOutLocation: { latitude: 26.8467, longitude: 80.9462, accuracy: 25 },
                     isLate: true,
+                    isHalfDay: false,
                     date: todayString
                 },
                 [yesterdayString]: {
@@ -547,18 +585,20 @@
                     checkInLocation: { latitude: 26.8467, longitude: 80.9462, accuracy: 15 },
                     checkOutLocation: { latitude: 26.8467, longitude: 80.9462, accuracy: 18 },
                     isLate: false,
+                    isHalfDay: false,
                     date: yesterdayString
                 }
             };
 
-            // Sample attendance for EMP002
+            // Sample attendance for EMP002 (including a half-day example)
             attendanceData['EMP002'] = {
                 [todayString]: {
                     checkIn: '08:30:00',
-                    checkOut: '17:30:00',
+                    checkOut: '12:30:00', // Example of a half-day checkout
                     checkInLocation: { latitude: 26.8500, longitude: 80.9500, accuracy: 12 },
                     checkOutLocation: { latitude: 26.8500, longitude: 80.9500, accuracy: 15 },
                     isLate: false,
+                    isHalfDay: true, // Manually set for sample, will be calculated
                     date: todayString
                 }
             };
@@ -587,49 +627,46 @@
                     appliedOn: '2025-09-05'
                 }
             ];
+            saveToLocalStorage(); // Save initial sample data
         }
 
         function login() {
-            const empId = document.getElementById('employeeId').value.toUpperCase();
+            const empId = document.getElementById('employeeId').value.toUpperCase(); // Convert to uppercase for consistency
             const password = document.getElementById('password').value;
             const messageDiv = document.getElementById('loginMessage');
 
             if (!empId || !password) {
-                messageDiv.innerHTML = '<div class="alert alert-error">Please enter both Employee ID and Password</div>';
+                messageDiv.innerHTML = '<div class="alert alert-error">Please enter both ID and Password</div>';
                 return;
             }
 
             if (employees[empId] && employees[empId].password === password) {
                 currentEmployee = empId;
-                isAdmin = employees[empId].isAdmin || false;
-                
                 document.getElementById('employeeName').textContent = employees[empId].name;
                 document.getElementById('loginSection').classList.add('hidden');
                 document.getElementById('mainApp').classList.remove('hidden');
-                
-                // Show admin tab if user is admin
-                if (isAdmin) {
+                messageDiv.innerHTML = '';
+
+                // Show/hide admin tab based on login
+                if (employees[empId].isAdmin) {
                     document.getElementById('adminTab').classList.remove('hidden');
-                    loadAllEmployees();
-                    loadPendingLeaves();
                 } else {
                     document.getElementById('adminTab').classList.add('hidden');
                 }
-                
-                messageDiv.innerHTML = '';
                 updateDashboard();
             } else {
-                messageDiv.innerHTML = '<div class="alert alert-error">Invalid Employee ID or Password</div>';
+                messageDiv.innerHTML = '<div class="alert alert-error">Invalid ID or Password</div>';
             }
         }
 
         function logout() {
             currentEmployee = null;
-            isAdmin = false;
             document.getElementById('loginSection').classList.remove('hidden');
             document.getElementById('mainApp').classList.add('hidden');
             document.getElementById('employeeId').value = '';
             document.getElementById('password').value = '';
+            document.getElementById('adminTab').classList.add('hidden'); // Hide admin tab on logout
+            saveToLocalStorage(); // Ensure data is saved on logout
         }
 
         function showTab(tabName) {
@@ -645,12 +682,16 @@
             document.getElementById(tabName).classList.add('active');
 
             // Add active class to clicked tab
-            event.target.classList.add('active');
+            // event.target is not reliable if called programmatically, better to find by ID
+            const clickedTab = document.querySelector(`.nav-tab[onclick="showTab('${tabName}')"]`);
+            if (clickedTab) {
+                clickedTab.classList.add('active');
+            }
 
-            // If admin tab is selected, refresh data
-            if (tabName === 'admin' && isAdmin) {
-                loadAllEmployees();
-                loadPendingLeaves();
+            // Specific actions for admin tab
+            if (tabName === 'admin') {
+                viewAllAttendanceRecords();
+                viewAllLeaveRequests();
             }
         }
 
@@ -679,11 +720,15 @@
                         updateLocationDisplay();
                     },
                     function(error) {
-                        console.log('Location access denied or unavailable');
-                        userLocation = { error: 'Location unavailable' };
+                        console.log('Location access denied or unavailable:', error.message);
+                        userLocation = { error: 'Location unavailable', message: error.message };
                         updateLocationDisplay();
-                    }
+                    },
+                    { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 } // Options for better accuracy
                 );
+            } else {
+                userLocation = { error: 'Geolocation not supported' };
+                updateLocationDisplay();
             }
         }
 
@@ -694,7 +739,7 @@
             if (userLocation && !userLocation.error) {
                 locationText = `<strong>Current Location:</strong> Lat: ${userLocation.latitude.toFixed(4)}, Long: ${userLocation.longitude.toFixed(4)} (Accuracy: ${userLocation.accuracy}m)`;
             } else {
-                locationText = '<strong>Location:</strong> Unable to determine location';
+                locationText = `<strong>Location:</strong> ${userLocation ? userLocation.message : 'Geolocation not supported by browser'}`;
             }
 
             locationElements.forEach(id => {
@@ -721,12 +766,17 @@
                 return;
             }
 
-            const isLate = now.getHours() > 9 || (now.getHours() === 9 && now.getMinutes() > 0);
+            // Check-in time: 9:00 AM
+            const checkInHour = 9;
+            const checkInMinute = 0;
+            const isLate = now.getHours() > checkInHour || (now.getHours() === checkInHour && now.getMinutes() > checkInMinute);
 
             attendanceData[currentEmployee][today] = {
                 checkIn: now.toLocaleTimeString(),
+                checkInTimestamp: now.getTime(), // Store timestamp for duration calculation
                 checkInLocation: userLocation,
                 isLate: isLate,
+                isHalfDay: false, // Default to false, updated on checkout
                 date: today
             };
 
@@ -757,12 +807,36 @@
             }
 
             attendanceData[currentEmployee][today].checkOut = now.toLocaleTimeString();
+            attendanceData[currentEmployee][today].checkOutTimestamp = now.getTime(); // Store timestamp
             attendanceData[currentEmployee][today].checkOutLocation = userLocation;
 
+            // Calculate work duration and determine half-day
+            const checkInTime = attendanceData[currentEmployee][today].checkInTimestamp;
+            const workDurationMs = now.getTime() - checkInTime;
+            const workDurationHours = workDurationMs / (1000 * 60 * 60);
+
+            // Define half-day threshold (e.g., less than 4 hours of work)
+            const halfDayThresholdHours = 4; 
+            // Define full-day threshold (e.g., less than 8 hours of work for a full day)
+            const fullDayThresholdHours = 8;
+
+            if (workDurationHours < halfDayThresholdHours) {
+                attendanceData[currentEmployee][today].isHalfDay = true;
+                attendanceData[currentEmployee][today].status = 'Half Day';
+            } else if (workDurationHours < fullDayThresholdHours) {
+                attendanceData[currentEmployee][today].isHalfDay = false; // Not a half day, but might be short
+                attendanceData[currentEmployee][today].status = 'Short Day';
+            } else {
+                attendanceData[currentEmployee][today].isHalfDay = false;
+                attendanceData[currentEmployee][today].status = 'Full Day';
+            }
+
+
             document.getElementById('attendanceMessage').innerHTML = 
-                `<div class="alert alert-success">Checked out at ${now.toLocaleTimeString()}</div>`;
+                `<div class="alert alert-success">Checked out at ${now.toLocaleTimeString()}. Work duration: ${workDurationHours.toFixed(2)} hours. Status: ${attendanceData[currentEmployee][today].status}</div>`;
             
             updateAttendanceStatus();
+            updateDashboard();
             saveToLocalStorage();
         }
 
@@ -777,11 +851,14 @@
                 if (todayData.checkIn && !todayData.checkOut) {
                     statusHtml = '<span class="status checked-in">Checked In</span>';
                 } else if (todayData.checkIn && todayData.checkOut) {
-                    statusHtml = '<span class="status checked-out">Checked Out</span>';
+                    statusHtml = `<span class="status checked-out">Checked Out (${todayData.status})</span>`;
                 }
                 
                 if (todayData.isLate) {
                     statusHtml += ' <span class="status" style="background: #fff3cd; color: #856404;">Late Mark</span>';
+                }
+                if (todayData.isHalfDay) {
+                    statusHtml += ' <span class="status" style="background: #ffe0b2; color: #e65100;">Half Day</span>';
                 }
             } else {
                 statusHtml = '<span class="status" style="background: #f8f9fa; color: #6c757d;">Not Marked</span>';
@@ -810,12 +887,20 @@
                 return;
             }
 
+            // Basic date validation
+            if (new Date(fromDate) > new Date(toDate)) {
+                document.getElementById('leaveMessage').innerHTML = 
+                    '<div class="alert alert-error">"From Date" cannot be after "To Date".</div>';
+                return;
+            }
+
             if (!leaveData[currentEmployee]) {
                 leaveData[currentEmployee] = [];
             }
 
             const leaveRequest = {
                 id: Date.now(),
+                employeeId: currentEmployee, // Store employee ID for admin view
                 type: leaveType,
                 fromDate: fromDate,
                 toDate: toDate,
@@ -831,7 +916,10 @@
 
             // Clear form
             document.getElementById('leaveReason').value = '';
+            document.getElementById('fromDate').value = '';
+            document.getElementById('toDate').value = '';
             saveToLocalStorage();
+            updateDashboard();
         }
 
         function updateDashboard() {
@@ -841,13 +929,20 @@
             const currentYear = new Date().getFullYear();
             let presentDays = 0;
             let lateMarks = 0;
-            let totalDays = new Date().getDate();
+            let halfDays = 0;
+            let totalDays = new Date().getDate(); // Days passed in the current month
 
             if (attendanceData[currentEmployee]) {
                 Object.values(attendanceData[currentEmployee]).forEach(record => {
                     const recordDate = new Date(record.date);
                     if (recordDate.getMonth() === currentMonth && recordDate.getFullYear() === currentYear) {
-                        if (record.checkIn) presentDays++;
+                        if (record.checkIn && record.checkOut) { // Only count if both checked in and out
+                            if (!record.isHalfDay) { // Count as present if not a half-day
+                                presentDays++;
+                            } else {
+                                halfDays++; // Count half days separately
+                            }
+                        }
                         if (record.isLate) lateMarks++;
                     }
                 });
@@ -859,6 +954,7 @@
                     if (leave.status === 'Approved') {
                         const from = new Date(leave.fromDate);
                         const to = new Date(leave.toDate);
+                        // Only count leaves within the current month
                         if (from.getMonth() === currentMonth && from.getFullYear() === currentYear) {
                             const days = Math.ceil((to - from) / (1000 * 60 * 60 * 24)) + 1;
                             leaveDaysCount += days;
@@ -871,6 +967,7 @@
             document.getElementById('presentDays').textContent = presentDays;
             document.getElementById('leaveDays').textContent = leaveDaysCount;
             document.getElementById('lateMarks').textContent = lateMarks;
+            document.getElementById('halfDays').textContent = halfDays; // Update half days stat
 
             updateAttendanceStatus();
         }
@@ -887,16 +984,21 @@
                             <th>Check In</th>
                             <th>Check Out</th>
                             <th>Status</th>
-                            <th>Location</th>
+                            <th>Late</th>
+                            <th>Half Day</th>
+                            <th>Location (Check In)</th>
                         </tr>
                     </thead>
                     <tbody>
             `;
 
             if (attendanceData[currentEmployee]) {
-                Object.values(attendanceData[currentEmployee]).forEach(record => {
-                    const locationText = record.checkInLocation && !record.checkInLocation.error 
-                        ? `${record.checkInLocation.latitude.toFixed(3)}, ${record.checkInLocation.longitude.toFixed(3)}`
+                // Sort records by date descending
+                const sortedRecords = Object.values(attendanceData[currentEmployee]).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+                sortedRecords.forEach(record => {
+                    const checkInLocationText = record.checkInLocation && !record.checkInLocation.error 
+                        ? `Lat: ${record.checkInLocation.latitude.toFixed(3)}, Long: ${record.checkInLocation.longitude.toFixed(3)}`
                         : 'N/A';
                     
                     tableHtml += `
@@ -904,8 +1006,10 @@
                             <td>${record.date}</td>
                             <td>${record.checkIn || '-'}</td>
                             <td>${record.checkOut || '-'}</td>
-                            <td>${record.isLate ? 'Late' : 'On Time'}</td>
-                            <td>${locationText}</td>
+                            <td>${record.status || (record.checkIn && record.checkOut ? 'Full Day' : 'Pending')}</td>
+                            <td>${record.isLate ? 'Yes' : 'No'}</td>
+                            <td>${record.isHalfDay ? 'Yes' : 'No'}</td>
+                            <td>${checkInLocationText}</td>
                         </tr>
                     `;
                 });
@@ -935,14 +1039,17 @@
             `;
 
             if (leaveData[currentEmployee]) {
-                leaveData[currentEmployee].forEach(leave => {
+                // Sort records by appliedOn date descending
+                const sortedLeaves = leaveData[currentEmployee].sort((a, b) => new Date(b.appliedOn) - new Date(a.appliedOn));
+
+                sortedLeaves.forEach(leave => {
                     tableHtml += `
                         <tr>
                             <td>${leave.type}</td>
                             <td>${leave.fromDate}</td>
                             <td>${leave.toDate}</td>
                             <td>${leave.reason}</td>
-                            <td><span class="status" style="background: ${leave.status === 'Approved' ? '#d4edda' : leave.status === 'Rejected' ? '#f8d7da' : '#fff3cd'};">${leave.status}</span></td>
+                            <td><span class="status" style="background: ${leave.status === 'Approved' ? '#d4edda' : (leave.status === 'Rejected' ? '#f8d7da' : '#fff3cd')}; color: ${leave.status === 'Approved' ? '#155724' : (leave.status === 'Rejected' ? '#721c24' : '#856404')};">${leave.status}</span></td>
                             <td>${leave.appliedOn}</td>
                         </tr>
                     `;
@@ -953,132 +1060,197 @@
             document.getElementById('recordsContent').innerHTML = tableHtml;
         }
 
-        // Admin functions
-        function loadAllEmployees() {
-            if (!isAdmin) return;
+        // --- Admin Panel Functions ---
+        function addEmployee() {
+            const empId = document.getElementById('newEmployeeId').value.toUpperCase();
+            const empName = document.getElementById('newEmployeeName').value;
+            const empPassword = document.getElementById('newEmployeePassword').value;
+            const messageDiv = document.getElementById('employeeManagementMessage');
+
+            if (!empId || !empName || !empPassword) {
+                messageDiv.innerHTML = '<div class="alert alert-error">All fields are required to add an employee.</div>';
+                return;
+            }
+            if (employees[empId]) {
+                messageDiv.innerHTML = '<div class="alert alert-error">Employee ID already exists.</div>';
+                return;
+            }
+
+            employees[empId] = { name: empName, password: empPassword, isAdmin: false };
+            messageDiv.innerHTML = `<div class="alert alert-success">Employee ${empName} (${empId}) added successfully!</div>`;
             
+            // Clear form
+            document.getElementById('newEmployeeId').value = '';
+            document.getElementById('newEmployeeName').value = '';
+            document.getElementById('newEmployeePassword').value = '';
+            saveToLocalStorage();
+        }
+
+        function deleteEmployee() {
+            const empId = document.getElementById('newEmployeeId').value.toUpperCase(); // Use the same input for ID
+            const messageDiv = document.getElementById('employeeManagementMessage');
+
+            if (!empId) {
+                messageDiv.innerHTML = '<div class="alert alert-error">Please enter an Employee ID to delete.</div>';
+                return;
+            }
+            if (!employees[empId]) {
+                messageDiv.innerHTML = '<div class="alert alert-error">Employee ID not found.</div>';
+                return;
+            }
+            if (empId === 'ADMIN') {
+                messageDiv.innerHTML = '<div class="alert alert-error">Cannot delete the ADMIN account.</div>';
+                return;
+            }
+
+            if (confirm(`Are you sure you want to delete employee ${employees[empId].name} (${empId}) and all their records?`)) {
+                delete employees[empId];
+                delete attendanceData[empId];
+                delete leaveData[empId];
+                messageDiv.innerHTML = `<div class="alert alert-success">Employee ${empId} deleted successfully!</div>`;
+                document.getElementById('newEmployeeId').value = ''; // Clear input after deletion
+                saveToLocalStorage();
+            }
+        }
+
+        function viewAllAttendanceRecords() {
+            const filterId = document.getElementById('filterEmployeeIdAttendance').value.toUpperCase();
             let tableHtml = `
+                <h3>All Attendance Records</h3>
                 <table class="records-table">
                     <thead>
                         <tr>
                             <th>Employee ID</th>
                             <th>Name</th>
-                            <th>Today's Status</th>
-                            <th>Last Check-in</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-
-            for (const empId in employees) {
-                if (empId === 'ADMIN') continue;
-                
-                const today = new Date().toDateString();
-                const empData = attendanceData[empId] || {};
-                const todayData = empData[today] || {};
-                
-                let status = 'Absent';
-                let lastCheckIn = '-';
-                
-                if (todayData.checkIn && todayData.checkOut) {
-                    status = 'Present (Checked Out)';
-                    lastCheckIn = todayData.checkIn;
-                } else if (todayData.checkIn) {
-                    status = 'Present (Checked In)';
-                    lastCheckIn = todayData.checkIn;
-                }
-                
-                tableHtml += `
-                    <tr>
-                        <td>${empId}</td>
-                        <td>${employees[empId].name}</td>
-                        <td>${status}</td>
-                        <td>${lastCheckIn}</td>
-                        <td>
-                            <button class="btn" onclick="viewEmployeeDetails('${empId}')">View Details</button>
-                        </td>
-                    </tr>
-                `;
-            }
-
-            tableHtml += '</tbody></table>';
-            document.getElementById('allEmployeesData').innerHTML = tableHtml;
-        }
-
-        function viewEmployeeDetails(empId) {
-            if (!isAdmin) return;
-            
-            let tableHtml = `
-                <h4>Attendance Details for ${employees[empId].name} (${empId})</h4>
-                <table class="records-table">
-                    <thead>
-                        <tr>
                             <th>Date</th>
                             <th>Check In</th>
                             <th>Check Out</th>
                             <th>Status</th>
+                            <th>Late</th>
+                            <th>Half Day</th>
+                            <th>Location (Check In)</th>
                         </tr>
                     </thead>
                     <tbody>
             `;
 
-            if (attendanceData[empId]) {
-                Object.values(attendanceData[empId]).forEach(record => {
-                    tableHtml += `
-                        <tr>
-                            <td>${record.date}</td>
-                            <td>${record.checkIn || '-'}</td>
-                            <td>${record.checkOut || '-'}</td>
-                            <td>${record.isLate ? 'Late' : 'On Time'}</td>
-                        </tr>
-                    `;
-                });
+            let allRecords = [];
+            for (const empId in attendanceData) {
+                if (filterId && empId !== filterId) continue; // Apply filter
+                for (const date in attendanceData[empId]) {
+                    const record = attendanceData[empId][date];
+                    allRecords.push({
+                        empId: empId,
+                        name: employees[empId] ? employees[empId].name : 'Unknown',
+                        ...record
+                    });
+                }
             }
+
+            // Sort all records by date descending
+            allRecords.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            allRecords.forEach(record => {
+                const checkInLocationText = record.checkInLocation && !record.checkInLocation.error 
+                    ? `Lat: ${record.checkInLocation.latitude.toFixed(3)}, Long: ${record.checkInLocation.longitude.toFixed(3)}`
+                    : 'N/A';
+                
+                tableHtml += `
+                    <tr>
+                        <td>${record.empId}</td>
+                        <td>${record.name}</td>
+                        <td>${record.date}</td>
+                        <td>${record.checkIn || '-'}</td>
+                        <td>${record.checkOut || '-'}</td>
+                        <td>${record.status || (record.checkIn && record.checkOut ? 'Full Day' : 'Pending')}</td>
+                        <td>${record.isLate ? 'Yes' : 'No'}</td>
+                        <td>${record.isHalfDay ? 'Yes' : 'No'}</td>
+                        <td>${checkInLocationText}</td>
+                    </tr>
+                `;
+            });
 
             tableHtml += '</tbody></table>';
-            
-            // Show in a modal or replace the current content
-            document.getElementById('allEmployeesData').innerHTML = tableHtml + 
-                `<button class="btn" onclick="loadAllEmployees()">Back to All Employees</button>`;
+            document.getElementById('allAttendanceRecords').innerHTML = tableHtml;
         }
 
-        function loadPendingLeaves() {
-            if (!isAdmin) return;
-            
-            let pendingLeaves = [];
-            
-            // Collect all pending leaves from all employees
-            for (const empId in leaveData) {
-                leaveData[empId].forEach(leave => {
-                    if (leave.status === 'Pending') {
-                        pendingLeaves.push({
-                            empId: empId,
-                            empName: employees[empId]?.name || 'Unknown',
-                            ...leave
-                        });
-                    }
-                });
-            }
-            
+        function viewAllLeaveRequests() {
+            const filterId = document.getElementById('filterEmployeeIdLeave').value.toUpperCase();
             let tableHtml = `
+                <h3>All Leave Requests</h3>
                 <table class="records-table">
                     <thead>
                         <tr>
-                            <th>Employee</th>
+                            <th>Employee ID</th>
+                            <th>Name</th>
                             <th>Leave Type</th>
                             <th>From Date</th>
                             <th>To Date</th>
                             <th>Reason</th>
+                            <th>Status</th>
                             <th>Applied On</th>
-                            <th>Actions</th>
+                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody>
             `;
 
-            if (pendingLeaves.length === 0) {
-                tableHtml += `<tr><td colspan="7" style="text-align: center;">No pending leave requests</td></tr>`;
-            } else {
-                pendingLeaves.forEach(leave => {
-                    tableHtml +=
+            let allLeaveRequests = [];
+            for (const empId in leaveData) {
+                if (filterId && empId !== filterId) continue; // Apply filter
+                leaveData[empId].forEach(leave => {
+                    allLeaveRequests.push({
+                        empId: empId,
+                        name: employees[empId] ? employees[empId].name : 'Unknown',
+                        ...leave
+                    });
+                });
+            }
+
+            // Sort all leave requests by appliedOn date descending
+            allLeaveRequests.sort((a, b) => new Date(b.appliedOn) - new Date(a.appliedOn));
+
+            allLeaveRequests.forEach(leave => {
+                const statusColor = leave.status === 'Approved' ? '#d4edda' : (leave.status === 'Rejected' ? '#f8d7da' : '#fff3cd');
+                const statusTextColor = leave.status === 'Approved' ? '#155724' : (leave.status === 'Rejected' ? '#721c24' : '#856404');
+                
+                tableHtml += `
+                    <tr>
+                        <td>${leave.empId}</td>
+                        <td>${leave.name}</td>
+                        <td>${leave.type}</td>
+                        <td>${leave.fromDate}</td>
+                        <td>${leave.toDate}</td>
+                        <td>${leave.reason}</td>
+                        <td><span class="status" style="background: ${statusColor}; color: ${statusTextColor};">${leave.status}</span></td>
+                        <td>${leave.appliedOn}</td>
+                        <td>
+                            ${leave.status === 'Pending' ? 
+                                `<button class="btn btn-success" style="padding: 5px 10px; font-size: 12px;" onclick="updateLeaveStatus('${leave.empId}', ${leave.id}, 'Approved')">Approve</button>
+                                <button class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="updateLeaveStatus('${leave.empId}', ${leave.id}, 'Rejected')">Reject</button>`
+                                : '-'
+                            }
+                        </td>
+                    </tr>
+                `;
+            });
+
+            tableHtml += '</tbody></table>';
+            document.getElementById('allLeaveRequests').innerHTML = tableHtml;
+        }
+
+        function updateLeaveStatus(empId, leaveId, newStatus) {
+            if (!leaveData[empId]) return;
+
+            const leaveIndex = leaveData[empId].findIndex(leave => leave.id === leaveId);
+            if (leaveIndex > -1) {
+                leaveData[empId][leaveIndex].status = newStatus;
+                saveToLocalStorage();
+                viewAllLeaveRequests(); // Refresh the admin leave table
+                updateDashboard(); // Update dashboard in case current user's leave status changed
+            }
+        }
+        // --- End Admin Panel Functions ---
+    </script>
+</body>
+</html>
