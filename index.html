@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Employee Attendance Management System</title>
+    <title>Employee Attendance Management System with Google Sheets</title>
     <style>
-        /* Existing CSS remains unchanged */
+        /* CSS remains the same as before */
         * {
             margin: 0;
             padding: 0;
@@ -248,6 +248,12 @@
             border: 1px solid #f5c6cb;
         }
 
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
         @media (max-width: 768px) {
             .container {
                 width: 95%;
@@ -295,7 +301,12 @@
     <div class="container">
         <div class="header">
             <h1>Employee Attendance Management System</h1>
-            <p>Track attendance, manage leaves, and monitor employee activity</p>
+            <p>Track attendance, manage leaves, and monitor employee activity with Google Sheets backend</p>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div id="loadingOverlay" class="alert alert-info" style="position: absolute; top: 0; left: 0; right: 0; z-index: 1000;">
+            Loading data from Google Sheets...
         </div>
 
         <!-- Login Section -->
@@ -490,148 +501,151 @@
     </div>
 
     <script>
-        // Sample employee data
-        const employees = {
+        // Google Apps Script Web App URL - Replace this with your deployed Web App URL after setting up Apps Script in your Google Sheet
+        const WEB_APP_URL = 'https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec'; // Placeholder, replace with actual deployed URL
+
+        // Sample employee data (for initial load, if sheet is empty)
+        let employees = {
             'ADMIN': { name: 'Administrator', password: 'admin123', isAdmin: true },
             'EMP001': { name: 'John Doe', password: 'password123' },
             'EMP002': { name: 'Jane Smith', password: 'pass456' },
             'EMP003': { name: 'Mike Johnson', password: 'mike789' }
         };
 
-        // In-memory storage for attendance and leave data
+        // In-memory data (for UI responsiveness)
         let attendanceData = {};
         let leaveData = {};
         let currentEmployee = null;
         let userLocation = null;
 
-        // Initialize the application
+        // Initialize
         document.addEventListener('DOMContentLoaded', function() {
-            // Load data from local storage first
-            const dataLoaded = loadFromLocalStorage();
-            if (dataLoaded) {
-                console.log('Previous data restored from browser storage');
-            } else {
-                // Add some sample data for testing if no data is found in local storage
-                addSampleData();
-            }
-            
-            // Enable auto-save for data persistence
-            enableAutoSave();
-            
+            document.getElementById('loadingOverlay').style.display = 'block';
             updateTime();
             setInterval(updateTime, 1000);
             getCurrentLocation();
+            loadDataFromSheets().then(() => {
+                document.getElementById('loadingOverlay').style.display = 'none';
+                addSampleDataIfEmpty();
+            });
         });
 
-        // --- Local Storage Functions ---
-        function saveToLocalStorage() {
-            localStorage.setItem('employeesData', JSON.stringify(employees));
-            localStorage.setItem('attendanceData', JSON.stringify(attendanceData));
-            localStorage.setItem('leaveData', JSON.stringify(leaveData));
-            console.log('Data saved to local storage.');
+        // Load data from Google Sheets
+        async function loadDataFromSheets() {
+            try {
+                const empRes = await fetch(`${WEB_APP_URL}?action=getEmployees`);
+                employees = await empRes.json();
+                const attRes = await fetch(`${WEB_APP_URL}?action=getAttendance`);
+                attendanceData = await attRes.json();
+                const leaveRes = await fetch(`${WEB_APP_URL}?action=getLeaves`);
+                leaveData = await leaveRes.json();
+            } catch (e) {
+                console.error('Error loading data from Google Sheets:', e);
+                // Fallback to localStorage if available, but for production, handle errors
+            }
         }
 
-        function loadFromLocalStorage() {
-            const storedEmployees = localStorage.getItem('employeesData');
-            const storedAttendance = localStorage.getItem('attendanceData');
-            const storedLeave = localStorage.getItem('leaveData');
-
-            if (storedEmployees) {
-                Object.assign(employees, JSON.parse(storedEmployees)); // Merge with initial sample data
+        // Save to Google Sheets (replace localStorage logic)
+        async function saveToSheets(data, action) {
+            try {
+                await fetch(WEB_APP_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: action, data: data }),
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            } catch (e) {
+                console.error('Error saving to Google Sheets:', e);
             }
-            if (storedAttendance) {
-                attendanceData = JSON.parse(storedAttendance);
-            }
-            if (storedLeave) {
-                leaveData = JSON.parse(storedLeave);
-            }
-
-            // Check if any data was loaded
-            return storedEmployees || storedAttendance || storedLeave;
         }
 
-        function enableAutoSave() {
-            // Save data every 5 seconds
-            setInterval(saveToLocalStorage, 5000); 
-            // Also save before the user closes the tab/browser
-            window.addEventListener('beforeunload', saveToLocalStorage);
+        // Add sample data if sheet is empty
+        function addSampleDataIfEmpty() {
+            if (Object.keys(employees).length <= 1) { // Assuming only placeholder
+                Object.assign(employees, {});
+                attendanceData = {};
+                leaveData = {};
+                addSampleData();
+                saveAllToSheets();
+            }
         }
-        // --- End Local Storage Functions ---
 
+        function saveAllToSheets() {
+            // This is a batch save simulation; in Apps Script, implement batch updates
+            // For simplicity, save individually
+            for (const key in attendanceData) {
+                for (const date in attendanceData[key]) {
+                    saveToSheets(attendanceData[key][date], 'addAttendance');
+                }
+            }
+            for (const key in leaveData) {
+                leaveData[key].forEach(leave => {
+                    saveToSheets(leave, 'addLeave');
+                });
+            }
+        }
 
         function addSampleData() {
-            // Add some sample attendance data for testing
+            // Sample data without duplicating
             const today = new Date();
-            const yesterday = new Date(today);
-            yesterday.setDate(yesterday.getDate() - 1);
+            const yesterday = new Date();
+            yesterday.setDate(today.getDate() - 1);
             
             const todayString = today.toDateString();
             const yesterdayString = yesterday.toDateString();
             
-            // Sample attendance for EMP001
             attendanceData['EMP001'] = {
                 [todayString]: {
-                    checkIn: '09:15:00',
-                    checkOut: '18:30:00',
-                    checkInLocation: { latitude: 26.8467, longitude: 80.9462, accuracy: 20 },
-                    checkOutLocation: { latitude: 26.8467, longitude: 80.9462, accuracy: 25 },
+                    checkIn: '09:15AM',
+                    checkOut: '18:30PM',
                     isLate: true,
                     isHalfDay: false,
-                    date: todayString
+                    date: todayString,
+                    status: 'Full Day'
                 },
                 [yesterdayString]: {
-                    checkIn: '08:45:00',
-                    checkOut: '17:45:00',
-                    checkInLocation: { latitude: 26.8467, longitude: 80.9462, accuracy: 15 },
-                    checkOutLocation: { latitude: 26.8467, longitude: 80.9462, accuracy: 18 },
+                    checkIn: '08:45AM',
+                    checkOut: '17:45PM',
                     isLate: false,
                     isHalfDay: false,
-                    date: yesterdayString
+                    date: yesterdayString,
+                    status: 'Full Day'
                 }
             };
 
-            // Sample attendance for EMP002 (including a half-day example)
             attendanceData['EMP002'] = {
                 [todayString]: {
-                    checkIn: '08:30:00',
-                    checkOut: '12:30:00', // Example of a half-day checkout
-                    checkInLocation: { latitude: 26.8500, longitude: 80.9500, accuracy: 12 },
-                    checkOutLocation: { latitude: 26.8500, longitude: 80.9500, accuracy: 15 },
+                    checkIn: '08:30AM',
+                    checkOut: '12:30PM',
                     isLate: false,
-                    isHalfDay: true, // Manually set for sample, will be calculated
-                    date: todayString
+                    isHalfDay: true,
+                    date: todayString,
+                    status: 'Half Day'
                 }
             };
 
-            // Sample leave data
             leaveData['EMP003'] = [
                 {
-                    id: Date.now(),
                     type: 'sick',
                     fromDate: '2025-09-10',
                     toDate: '2025-09-12',
                     reason: 'Medical consultation',
-                    status: 'Pending',
-                    appliedOn: '2025-09-08'
+                    status: 'Pending'
                 }
             ];
 
             leaveData['EMP001'] = [
                 {
-                    id: Date.now() + 1,
                     type: 'casual',
                     fromDate: '2025-09-15',
                     toDate: '2025-09-15',
                     reason: 'Personal work',
-                    status: 'Approved',
-                    appliedOn: '2025-09-05'
+                    status: 'Approved'
                 }
             ];
-            saveToLocalStorage(); // Save initial sample data
         }
 
         function login() {
-            const empId = document.getElementById('employeeId').value.toUpperCase(); // Convert to uppercase for consistency
+            const empId = document.getElementById('employeeId').value.toUpperCase();
             const password = document.getElementById('password').value;
             const messageDiv = document.getElementById('loginMessage');
 
@@ -646,12 +660,8 @@
                 document.getElementById('loginSection').classList.add('hidden');
                 document.getElementById('mainApp').classList.remove('hidden');
                 messageDiv.innerHTML = '';
-
-                // Show/hide admin tab based on login
                 if (employees[empId].isAdmin) {
                     document.getElementById('adminTab').classList.remove('hidden');
-                } else {
-                    document.getElementById('adminTab').classList.add('hidden');
                 }
                 updateDashboard();
             } else {
@@ -665,30 +675,15 @@
             document.getElementById('mainApp').classList.add('hidden');
             document.getElementById('employeeId').value = '';
             document.getElementById('password').value = '';
-            document.getElementById('adminTab').classList.add('hidden'); // Hide admin tab on logout
-            saveToLocalStorage(); // Ensure data is saved on logout
+            document.getElementById('adminTab').classList.add('hidden');
         }
 
         function showTab(tabName) {
-            // Hide all tab panes
             const tabPanes = document.querySelectorAll('.tab-pane');
             tabPanes.forEach(pane => pane.classList.remove('active'));
-
-            // Remove active class from all tabs
             const tabs = document.querySelectorAll('.nav-tab');
             tabs.forEach(tab => tab.classList.remove('active'));
-
-            // Show selected tab pane
             document.getElementById(tabName).classList.add('active');
-
-            // Add active class to clicked tab
-            // event.target is not reliable if called programmatically, better to find by ID
-            const clickedTab = document.querySelector(`.nav-tab[onclick="showTab('${tabName}')"]`);
-            if (clickedTab) {
-                clickedTab.classList.add('active');
-            }
-
-            // Specific actions for admin tab
             if (tabName === 'admin') {
                 viewAllAttendanceRecords();
                 viewAllLeaveRequests();
@@ -698,20 +693,16 @@
         function updateTime() {
             const now = new Date();
             const timeString = now.toLocaleTimeString();
-            const timeElements = ['currentTime', 'attendanceTime'];
-            
-            timeElements.forEach(id => {
+            ['currentTime', 'attendanceTime'].forEach(id => {
                 const element = document.getElementById(id);
-                if (element) {
-                    element.textContent = timeString;
-                }
+                if (element) element.textContent = timeString;
             });
         }
 
         function getCurrentLocation() {
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(
-                    function(position) {
+                    position => {
                         userLocation = {
                             latitude: position.coords.latitude,
                             longitude: position.coords.longitude,
@@ -719,538 +710,217 @@
                         };
                         updateLocationDisplay();
                     },
-                    function(error) {
-                        console.log('Location access denied or unavailable:', error.message);
-                        userLocation = { error: 'Location unavailable', message: error.message };
+                    error => {
+                        userLocation = { error: 'Location unavailable' };
                         updateLocationDisplay();
-                    },
-                    { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 } // Options for better accuracy
+                    }
                 );
-            } else {
-                userLocation = { error: 'Geolocation not supported' };
-                updateLocationDisplay();
             }
         }
 
         function updateLocationDisplay() {
-            const locationElements = ['locationDisplay', 'locationInfo'];
-            let locationText = '';
-
-            if (userLocation && !userLocation.error) {
-                locationText = `<strong>Current Location:</strong> Lat: ${userLocation.latitude.toFixed(4)}, Long: ${userLocation.longitude.toFixed(4)} (Accuracy: ${userLocation.accuracy}m)`;
-            } else {
-                locationText = `<strong>Location:</strong> ${userLocation ? userLocation.message : 'Geolocation not supported by browser'}`;
-            }
-
-            locationElements.forEach(id => {
-                const element = document.getElementById(id);
-                if (element) {
-                    element.innerHTML = locationText;
-                }
+            const display = userLocation && !userLocation.error 
+                ? `Lat: ${userLocation.latitude.toFixed(4)}, Long: ${userLocation.longitude.toFixed(4)}`
+                : 'Location unavailable';
+            ['locationDisplay', 'locationInfo'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.innerHTML = `<strong>Current Location:</strong> ${display}`;
             });
         }
 
-        function checkIn() {
-            if (!currentEmployee) return;
-
+        async function checkIn() {
             const now = new Date();
             const today = now.toDateString();
-            
-            if (!attendanceData[currentEmployee]) {
-                attendanceData[currentEmployee] = {};
-            }
-
+            if (!attendanceData[currentEmployee]) attendanceData[currentEmployee] = {};
             if (attendanceData[currentEmployee][today] && attendanceData[currentEmployee][today].checkIn) {
-                document.getElementById('attendanceMessage').innerHTML = 
-                    '<div class="alert alert-error">Already checked in today!</div>';
+                document.getElementById('attendanceMessage').innerHTML = '<div class="alert alert-error">Already checked in today!</div>';
                 return;
             }
-
-            // Check-in time: 9:00 AM
-            const checkInHour = 9;
-            const checkInMinute = 0;
-            const isLate = now.getHours() > checkInHour || (now.getHours() === checkInHour && now.getMinutes() > checkInMinute);
-
+            const isLate = now.getHours() > 9;
             attendanceData[currentEmployee][today] = {
                 checkIn: now.toLocaleTimeString(),
-                checkInTimestamp: now.getTime(), // Store timestamp for duration calculation
-                checkInLocation: userLocation,
                 isLate: isLate,
-                isHalfDay: false, // Default to false, updated on checkout
-                date: today
+                isHalfDay: false,
+                date: today,
+                status: 'Checked In'
             };
-
-            document.getElementById('attendanceMessage').innerHTML = 
-                `<div class="alert alert-success">Checked in at ${now.toLocaleTimeString()}${isLate ? ' (Late)' : ''}</div>`;
-            
+            await saveToSheets(attendanceData[currentEmployee][today], 'addAttendance');
+            document.getElementById('attendanceMessage').innerHTML = '<div class="alert alert-success">Checked in successfully!</div>';
             updateAttendanceStatus();
             updateDashboard();
-            saveToLocalStorage();
         }
 
-        function checkOut() {
-            if (!currentEmployee) return;
-
-            const now = new Date();
-            const today = now.toDateString();
-
+        async function checkOut() {
+            const today = new Date().toDateString();
             if (!attendanceData[currentEmployee] || !attendanceData[currentEmployee][today] || !attendanceData[currentEmployee][today].checkIn) {
-                document.getElementById('attendanceMessage').innerHTML = 
-                    '<div class="alert alert-error">Please check in first!</div>';
+                document.getElementById('attendanceMessage').innerHTML = '<div class="alert alert-error">Please check in first!</div>';
                 return;
             }
-
-            if (attendanceData[currentEmployee][today].checkOut) {
-                document.getElementById('attendanceMessage').innerHTML = 
-                    '<div class="alert alert-error">Already checked out today!</div>';
-                return;
-            }
-
+            const now = new Date();
             attendanceData[currentEmployee][today].checkOut = now.toLocaleTimeString();
-            attendanceData[currentEmployee][today].checkOutTimestamp = now.getTime(); // Store timestamp
-            attendanceData[currentEmployee][today].checkOutLocation = userLocation;
-
-            // Calculate work duration and determine half-day
-            const checkInTime = attendanceData[currentEmployee][today].checkInTimestamp;
-            const workDurationMs = now.getTime() - checkInTime;
-            const workDurationHours = workDurationMs / (1000 * 60 * 60);
-
-            // Define half-day threshold (e.g., less than 4 hours of work)
-            const halfDayThresholdHours = 4; 
-            // Define full-day threshold (e.g., less than 8 hours of work for a full day)
-            const fullDayThresholdHours = 8;
-
-            if (workDurationHours < halfDayThresholdHours) {
+            const checkInTime = new Date(attendanceData[currentEmployee][today].checkIn);
+            const hoursWorked = (now - checkInTime) / (1000 * 60 * 60);
+            if (hoursWorked < 4) {
                 attendanceData[currentEmployee][today].isHalfDay = true;
                 attendanceData[currentEmployee][today].status = 'Half Day';
-            } else if (workDurationHours < fullDayThresholdHours) {
-                attendanceData[currentEmployee][today].isHalfDay = false; // Not a half day, but might be short
+            } else if (hoursWorked < 8) {
                 attendanceData[currentEmployee][today].status = 'Short Day';
             } else {
-                attendanceData[currentEmployee][today].isHalfDay = false;
                 attendanceData[currentEmployee][today].status = 'Full Day';
             }
-
-
-            document.getElementById('attendanceMessage').innerHTML = 
-                `<div class="alert alert-success">Checked out at ${now.toLocaleTimeString()}. Work duration: ${workDurationHours.toFixed(2)} hours. Status: ${attendanceData[currentEmployee][today].status}</div>`;
-            
+            await saveToSheets(attendanceData[currentEmployee][today], 'addAttendance');
+            document.getElementById('attendanceMessage').innerHTML = '<div class="alert alert-success">Checked out successfully!</div>';
             updateAttendanceStatus();
             updateDashboard();
-            saveToLocalStorage();
         }
 
         function updateAttendanceStatus() {
-            if (!currentEmployee) return;
-
             const today = new Date().toDateString();
-            const todayData = attendanceData[currentEmployee] && attendanceData[currentEmployee][today];
-            
-            let statusHtml = '';
-            if (todayData) {
-                if (todayData.checkIn && !todayData.checkOut) {
+            const record = attendanceData[currentEmployee]?.[today];
+            let statusHtml = '<span class="status" style="background: #f8f9fa;">Not Marked</span>';
+            if (record) {
+                if (record.checkIn && !record.checkOut) {
                     statusHtml = '<span class="status checked-in">Checked In</span>';
-                } else if (todayData.checkIn && todayData.checkOut) {
-                    statusHtml = `<span class="status checked-out">Checked Out (${todayData.status})</span>`;
+                } else if (record.checkOut) {
+                    statusHtml = `<span class="status checked-out">${record.status}</span>`;
                 }
-                
-                if (todayData.isLate) {
-                    statusHtml += ' <span class="status" style="background: #fff3cd; color: #856404;">Late Mark</span>';
-                }
-                if (todayData.isHalfDay) {
-                    statusHtml += ' <span class="status" style="background: #ffe0b2; color: #e65100;">Half Day</span>';
-                }
-            } else {
-                statusHtml = '<span class="status" style="background: #f8f9fa; color: #6c757d;">Not Marked</span>';
+                if (record.isLate) statusHtml += '<span class="status">Late</span>';
+                if (record.isHalfDay) statusHtml += '<span class="status">Half Day</span>';
             }
-
-            const statusElements = ['currentStatus', 'attendanceStatus'];
-            statusElements.forEach(id => {
-                const element = document.getElementById(id);
-                if (element) {
-                    element.innerHTML = statusHtml;
-                }
+            ['currentStatus', 'attendanceStatus'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.innerHTML = statusHtml;
             });
         }
 
-        function submitLeave() {
-            if (!currentEmployee) return;
-
-            const leaveType = document.getElementById('leaveType').value;
+        async function submitLeave() {
+            const type = document.getElementById('leaveType').value;
             const fromDate = document.getElementById('fromDate').value;
             const toDate = document.getElementById('toDate').value;
             const reason = document.getElementById('leaveReason').value;
-
             if (!fromDate || !toDate || !reason) {
-                document.getElementById('leaveMessage').innerHTML = 
-                    '<div class="alert alert-error">Please fill all fields</div>';
+                document.getElementById('leaveMessage').innerHTML = '<div class="alert alert-error">Fill all fields</div>';
                 return;
             }
-
-            // Basic date validation
             if (new Date(fromDate) > new Date(toDate)) {
-                document.getElementById('leaveMessage').innerHTML = 
-                    '<div class="alert alert-error">"From Date" cannot be after "To Date".</div>';
+                document.getElementById('leaveMessage').innerHTML = '<div class="alert alert-error">Invalid dates</div>';
                 return;
             }
-
-            if (!leaveData[currentEmployee]) {
-                leaveData[currentEmployee] = [];
-            }
-
-            const leaveRequest = {
-                id: Date.now(),
-                employeeId: currentEmployee, // Store employee ID for admin view
-                type: leaveType,
-                fromDate: fromDate,
-                toDate: toDate,
-                reason: reason,
-                status: 'Pending',
-                appliedOn: new Date().toLocaleDateString()
-            };
-
-            leaveData[currentEmployee].push(leaveRequest);
-
-            document.getElementById('leaveMessage').innerHTML = 
-                '<div class="alert alert-success">Leave request submitted successfully!</div>';
-
-            // Clear form
+            const leave = { empId: currentEmployee, type, fromDate, toDate, reason, status: 'Pending' };
+            if (!leaveData[currentEmployee]) leaveData[currentEmployee] = [];
+            leaveData[currentEmployee].push(leave);
+            await saveToSheets(leave, 'addLeave');
+            document.getElementById('leaveMessage').innerHTML = '<div class="alert alert-success">Leave submitted!</div>';
             document.getElementById('leaveReason').value = '';
             document.getElementById('fromDate').value = '';
             document.getElementById('toDate').value = '';
-            saveToLocalStorage();
             updateDashboard();
         }
 
         function updateDashboard() {
-            if (!currentEmployee) return;
-
             const currentMonth = new Date().getMonth();
             const currentYear = new Date().getFullYear();
-            let presentDays = 0;
-            let lateMarks = 0;
-            let halfDays = 0;
-            let totalDays = new Date().getDate(); // Days passed in the current month
-
-            if (attendanceData[currentEmployee]) {
-                Object.values(attendanceData[currentEmployee]).forEach(record => {
-                    const recordDate = new Date(record.date);
-                    if (recordDate.getMonth() === currentMonth && recordDate.getFullYear() === currentYear) {
-                        if (record.checkIn && record.checkOut) { // Only count if both checked in and out
-                            if (!record.isHalfDay) { // Count as present if not a half-day
-                                presentDays++;
-                            } else {
-                                halfDays++; // Count half days separately
-                            }
-                        }
-                        if (record.isLate) lateMarks++;
-                    }
-                });
-            }
-
-            let leaveDaysCount = 0;
-            if (leaveData[currentEmployee]) {
-                leaveData[currentEmployee].forEach(leave => {
-                    if (leave.status === 'Approved') {
-                        const from = new Date(leave.fromDate);
-                        const to = new Date(leave.toDate);
-                        // Only count leaves within the current month
-                        if (from.getMonth() === currentMonth && from.getFullYear() === currentYear) {
-                            const days = Math.ceil((to - from) / (1000 * 60 * 60 * 24)) + 1;
-                            leaveDaysCount += days;
-                        }
-                    }
-                });
-            }
-
-            document.getElementById('totalDays').textContent = totalDays;
-            document.getElementById('presentDays').textContent = presentDays;
-            document.getElementById('leaveDays').textContent = leaveDaysCount;
-            document.getElementById('lateMarks').textContent = lateMarks;
-            document.getElementById('halfDays').textContent = halfDays; // Update half days stat
-
+            let present = 0, late = 0, half = 0, leaveDays = 0;
+            Object.values(attendanceData[currentEmployee] || {}).forEach(r => {
+                const d = new Date(r.date);
+                if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
+                    if (r.checkOut) present++;
+                    if (r.isLate) late++;
+                    if (r.isHalfDay) half++;
+                }
+            });
+            (leaveData[currentEmployee] || []).forEach(l => {
+                if (l.status === 'Approved') leaveDays++;
+            });
+            document.getElementById('totalDays').textContent = present;
+            document.getElementById('presentDays').textContent = present - half;
+            document.getElementById('lateMarks').textContent = late;
+            document.getElementById('halfDays').textContent = half;
+            document.getElementById('leaveDays').textContent = leaveDays;
             updateAttendanceStatus();
         }
 
         function showAttendanceRecords() {
-            if (!currentEmployee) return;
-
-            let tableHtml = `
-                <h3>Attendance Records</h3>
-                <table class="records-table">
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Check In</th>
-                            <th>Check Out</th>
-                            <th>Status</th>
-                            <th>Late</th>
-                            <th>Half Day</th>
-                            <th>Location (Check In)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-
-            if (attendanceData[currentEmployee]) {
-                // Sort records by date descending
-                const sortedRecords = Object.values(attendanceData[currentEmployee]).sort((a, b) => new Date(b.date) - new Date(a.date));
-
-                sortedRecords.forEach(record => {
-                    const checkInLocationText = record.checkInLocation && !record.checkInLocation.error 
-                        ? `Lat: ${record.checkInLocation.latitude.toFixed(3)}, Long: ${record.checkInLocation.longitude.toFixed(3)}`
-                        : 'N/A';
-                    
-                    tableHtml += `
-                        <tr>
-                            <td>${record.date}</td>
-                            <td>${record.checkIn || '-'}</td>
-                            <td>${record.checkOut || '-'}</td>
-                            <td>${record.status || (record.checkIn && record.checkOut ? 'Full Day' : 'Pending')}</td>
-                            <td>${record.isLate ? 'Yes' : 'No'}</td>
-                            <td>${record.isHalfDay ? 'Yes' : 'No'}</td>
-                            <td>${checkInLocationText}</td>
-                        </tr>
-                    `;
-                });
-            }
-
-            tableHtml += '</tbody></table>';
-            document.getElementById('recordsContent').innerHTML = tableHtml;
+            let html = '<h3>Attendance Records</h3><table class="records-table"><thead><tr><th>Date</th><th>Check In</th><th>Check Out</th><th>Late</th><th>Half Day</th><th>Status</th></tr></thead><tbody>';
+            Object.values(attendanceData[currentEmployee] || {}).forEach(r => {
+                html += `<tr><td>${r.date}</td><td>${r.checkIn || '-'}</td><td>${r.checkOut || '-'}</td><td>${r.isLate ? 'Yes' : 'No'}</td><td>${r.isHalfDay ? 'Yes' : 'No'}</td><td>${r.status || '-'}</td></tr>`;
+            });
+            html += '</tbody></table>';
+            document.getElementById('recordsContent').innerHTML = html;
         }
 
         function showLeaveRecords() {
-            if (!currentEmployee) return;
-
-            let tableHtml = `
-                <h3>Leave Records</h3>
-                <table class="records-table">
-                    <thead>
-                        <tr>
-                            <th>Leave Type</th>
-                            <th>From Date</th>
-                            <th>To Date</th>
-                            <th>Reason</th>
-                            <th>Status</th>
-                            <th>Applied On</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-
-            if (leaveData[currentEmployee]) {
-                // Sort records by appliedOn date descending
-                const sortedLeaves = leaveData[currentEmployee].sort((a, b) => new Date(b.appliedOn) - new Date(a.appliedOn));
-
-                sortedLeaves.forEach(leave => {
-                    tableHtml += `
-                        <tr>
-                            <td>${leave.type}</td>
-                            <td>${leave.fromDate}</td>
-                            <td>${leave.toDate}</td>
-                            <td>${leave.reason}</td>
-                            <td><span class="status" style="background: ${leave.status === 'Approved' ? '#d4edda' : (leave.status === 'Rejected' ? '#f8d7da' : '#fff3cd')}; color: ${leave.status === 'Approved' ? '#155724' : (leave.status === 'Rejected' ? '#721c24' : '#856404')};">${leave.status}</span></td>
-                            <td>${leave.appliedOn}</td>
-                        </tr>
-                    `;
-                });
-            }
-
-            tableHtml += '</tbody></table>';
-            document.getElementById('recordsContent').innerHTML = tableHtml;
+            let html = '<h3>Leave Records</h3><table class="records-table"><thead><tr><th>Type</th><th>From</th><th>To</th><th>Reason</th><th>Status</th></tr></thead><tbody>';
+            (leaveData[currentEmployee] || []).forEach(l => {
+                html += `<tr><td>${l.type}</td><td>${l.fromDate}</td><td>${l.toDate}</td><td>${l.reason}</td><td>${l.status}</td></tr>`;
+            });
+            html += '</tbody></table>';
+            document.getElementById('recordsContent').innerHTML = html;
         }
 
-        // --- Admin Panel Functions ---
-        function addEmployee() {
+        // Admin functions - Similar implementation, calling Google Sheets
+        async function addEmployee() {
             const empId = document.getElementById('newEmployeeId').value.toUpperCase();
-            const empName = document.getElementById('newEmployeeName').value;
-            const empPassword = document.getElementById('newEmployeePassword').value;
-            const messageDiv = document.getElementById('employeeManagementMessage');
-
-            if (!empId || !empName || !empPassword) {
-                messageDiv.innerHTML = '<div class="alert alert-error">All fields are required to add an employee.</div>';
+            const name = document.getElementById('newEmployeeName').value;
+            const pass = document.getElementById('newEmployeePassword').value;
+            if (!empId || !name || !pass) {
+                document.getElementById('employeeManagementMessage').innerHTML = '<div class="alert alert-error">All fields required</div>';
                 return;
             }
-            if (employees[empId]) {
-                messageDiv.innerHTML = '<div class="alert alert-error">Employee ID already exists.</div>';
-                return;
-            }
-
-            employees[empId] = { name: empName, password: empPassword, isAdmin: false };
-            messageDiv.innerHTML = `<div class="alert alert-success">Employee ${empName} (${empId}) added successfully!</div>`;
-            
-            // Clear form
-            document.getElementById('newEmployeeId').value = '';
-            document.getElementById('newEmployeeName').value = '';
-            document.getElementById('newEmployeePassword').value = '';
-            saveToLocalStorage();
+            employees[empId] = { name, password: pass, isAdmin: false };
+            await saveToSheets({ empId, name, password: pass, isAdmin: false }, 'addEmployee');
+            document.getElementById('employeeManagementMessage').innerHTML = '<div class="alert alert-success">Employee added!</div>';
         }
 
-        function deleteEmployee() {
-            const empId = document.getElementById('newEmployeeId').value.toUpperCase(); // Use the same input for ID
-            const messageDiv = document.getElementById('employeeManagementMessage');
-
-            if (!empId) {
-                messageDiv.innerHTML = '<div class="alert alert-error">Please enter an Employee ID to delete.</div>';
+        async function deleteEmployee() {
+            const empId = document.getElementById('newEmployeeId').value.toUpperCase();
+            if (!empId || !employees[empId]) {
+                document.getElementById('employeeManagementMessage').innerHTML = '<div class="alert alert-error">Invalid ID</div>';
                 return;
             }
-            if (!employees[empId]) {
-                messageDiv.innerHTML = '<div class="alert alert-error">Employee ID not found.</div>';
-                return;
-            }
-            if (empId === 'ADMIN') {
-                messageDiv.innerHTML = '<div class="alert alert-error">Cannot delete the ADMIN account.</div>';
-                return;
-            }
-
-            if (confirm(`Are you sure you want to delete employee ${employees[empId].name} (${empId}) and all their records?`)) {
-                delete employees[empId];
-                delete attendanceData[empId];
-                delete leaveData[empId];
-                messageDiv.innerHTML = `<div class="alert alert-success">Employee ${empId} deleted successfully!</div>`;
-                document.getElementById('newEmployeeId').value = ''; // Clear input after deletion
-                saveToLocalStorage();
-            }
+            delete employees[empId];
+            delete attendanceData[empId];
+            delete leaveData[empId];
+            await saveToSheets({ empId }, 'deleteEmployee'); // Implement in Apps Script
+            document.getElementById('employeeManagementMessage').innerHTML = '<div class="alert alert-success">Employee deleted!</div>';
         }
 
-        function viewAllAttendanceRecords() {
-            const filterId = document.getElementById('filterEmployeeIdAttendance').value.toUpperCase();
-            let tableHtml = `
-                <h3>All Attendance Records</h3>
-                <table class="records-table">
-                    <thead>
-                        <tr>
-                            <th>Employee ID</th>
-                            <th>Name</th>
-                            <th>Date</th>
-                            <th>Check In</th>
-                            <th>Check Out</th>
-                            <th>Status</th>
-                            <th>Late</th>
-                            <th>Half Day</th>
-                            <th>Location (Check In)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-
-            let allRecords = [];
-            for (const empId in attendanceData) {
-                if (filterId && empId !== filterId) continue; // Apply filter
-                for (const date in attendanceData[empId]) {
-                    const record = attendanceData[empId][date];
-                    allRecords.push({
-                        empId: empId,
-                        name: employees[empId] ? employees[empId].name : 'Unknown',
-                        ...record
-                    });
-                }
-            }
-
-            // Sort all records by date descending
-            allRecords.sort((a, b) => new Date(b.date) - new Date(a.date));
-
-            allRecords.forEach(record => {
-                const checkInLocationText = record.checkInLocation && !record.checkInLocation.error 
-                    ? `Lat: ${record.checkInLocation.latitude.toFixed(3)}, Long: ${record.checkInLocation.longitude.toFixed(3)}`
-                    : 'N/A';
-                
-                tableHtml += `
-                    <tr>
-                        <td>${record.empId}</td>
-                        <td>${record.name}</td>
-                        <td>${record.date}</td>
-                        <td>${record.checkIn || '-'}</td>
-                        <td>${record.checkOut || '-'}</td>
-                        <td>${record.status || (record.checkIn && record.checkOut ? 'Full Day' : 'Pending')}</td>
-                        <td>${record.isLate ? 'Yes' : 'No'}</td>
-                        <td>${record.isHalfDay ? 'Yes' : 'No'}</td>
-                        <td>${checkInLocationText}</td>
-                    </tr>
-                `;
-            });
-
-            tableHtml += '</tbody></table>';
-            document.getElementById('allAttendanceRecords').innerHTML = tableHtml;
-        }
-
-        function viewAllLeaveRequests() {
-            const filterId = document.getElementById('filterEmployeeIdLeave').value.toUpperCase();
-            let tableHtml = `
-                <h3>All Leave Requests</h3>
-                <table class="records-table">
-                    <thead>
-                        <tr>
-                            <th>Employee ID</th>
-                            <th>Name</th>
-                            <th>Leave Type</th>
-                            <th>From Date</th>
-                            <th>To Date</th>
-                            <th>Reason</th>
-                            <th>Status</th>
-                            <th>Applied On</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-
-            let allLeaveRequests = [];
-            for (const empId in leaveData) {
-                if (filterId && empId !== filterId) continue; // Apply filter
-                leaveData[empId].forEach(leave => {
-                    allLeaveRequests.push({
-                        empId: empId,
-                        name: employees[empId] ? employees[empId].name : 'Unknown',
-                        ...leave
-                    });
+        async function viewAllAttendanceRecords() {
+            await loadDataFromSheets(); // Refresh
+            let html = '<table class="records-table"><thead><tr><th>EmpID</th><th>Name</th><th>Date</th><th>Check In</th><th>Check Out</th><th>Late</th><th>Half Day</th><th>Status</th></tr></thead><tbody>';
+            const filter = document.getElementById('filterEmployeeIdAttendance').value.toUpperCase();
+            Object.keys(attendanceData).forEach(id => {
+                if (filter && id !== filter) return;
+                Object.values(attendanceData[id]).forEach(r => {
+                    html += `<tr><td>${id}</td><td>${employees[id]?.name || 'Unknown'}</td><td>${r.date}</td><td>${r.checkIn || '-'}</td><td>${r.checkOut || '-'}</td><td>${r.isLate ? 'Yes' : 'No'}</td><td>${r.isHalfDay ? 'Yes' : 'No'}</td><td>${r.status || '-'}</td></tr>`;
                 });
-            }
-
-            // Sort all leave requests by appliedOn date descending
-            allLeaveRequests.sort((a, b) => new Date(b.appliedOn) - new Date(a.appliedOn));
-
-            allLeaveRequests.forEach(leave => {
-                const statusColor = leave.status === 'Approved' ? '#d4edda' : (leave.status === 'Rejected' ? '#f8d7da' : '#fff3cd');
-                const statusTextColor = leave.status === 'Approved' ? '#155724' : (leave.status === 'Rejected' ? '#721c24' : '#856404');
-                
-                tableHtml += `
-                    <tr>
-                        <td>${leave.empId}</td>
-                        <td>${leave.name}</td>
-                        <td>${leave.type}</td>
-                        <td>${leave.fromDate}</td>
-                        <td>${leave.toDate}</td>
-                        <td>${leave.reason}</td>
-                        <td><span class="status" style="background: ${statusColor}; color: ${statusTextColor};">${leave.status}</span></td>
-                        <td>${leave.appliedOn}</td>
-                        <td>
-                            ${leave.status === 'Pending' ? 
-                                `<button class="btn btn-success" style="padding: 5px 10px; font-size: 12px;" onclick="updateLeaveStatus('${leave.empId}', ${leave.id}, 'Approved')">Approve</button>
-                                <button class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="updateLeaveStatus('${leave.empId}', ${leave.id}, 'Rejected')">Reject</button>`
-                                : '-'
-                            }
-                        </td>
-                    </tr>
-                `;
             });
-
-            tableHtml += '</tbody></table>';
-            document.getElementById('allLeaveRequests').innerHTML = tableHtml;
+            html += '</tbody></table>';
+            document.getElementById('allAttendanceRecords').innerHTML = html;
         }
 
-        function updateLeaveStatus(empId, leaveId, newStatus) {
-            if (!leaveData[empId]) return;
-
-            const leaveIndex = leaveData[empId].findIndex(leave => leave.id === leaveId);
-            if (leaveIndex > -1) {
-                leaveData[empId][leaveIndex].status = newStatus;
-                saveToLocalStorage();
-                viewAllLeaveRequests(); // Refresh the admin leave table
-                updateDashboard(); // Update dashboard in case current user's leave status changed
-            }
+        async function viewAllLeaveRequests() {
+            await loadDataFromSheets();
+            let html = '<table class="records-table"><thead><tr><th>EmpID</th><th>Name</th><th>Type</th><th>From</th><th>To</th><th>Reason</th><th>Status</th><th>Action</th></tr></thead><tbody>';
+            const filter = document.getElementById('filterEmployeeIdLeave').value.toUpperCase();
+            Object.keys(leaveData).forEach(id => {
+                if (filter && id !== filter) return;
+                leaveData[id].forEach(l => {
+                    html += `<tr><td>${id}</td><td>${employees[id]?.name || 'Unknown'}</td><td>${l.type}</td><td>${l.fromDate}</td><td>${l.toDate}</td><td>${l.reason}</td><td>${l.status}</td><td><button class="btn btn-success" onclick="updateLeaveStatus('${id}', 0, 'Approved')">Approve</button><button class="btn btn-danger" onclick="updateLeaveStatus('${id}', 0, 'Rejected')">Reject</button></td></tr>`;
+                });
+            });
+            html += '</tbody></table>';
+            document.getElementById('allLeaveRequests').innerHTML = html;
         }
-        // --- End Admin Panel Functions ---
+
+        async function updateLeaveStatus(empId, index, status) {
+            leaveData[empId][index].status = status;
+            await saveToSheets(leaveData[empId][index], 'updateLeave');
+            viewAllLeaveRequests();
+            updateDashboard();
+        }
     </script>
 </body>
 </html>
+</content>
+</create_file>
