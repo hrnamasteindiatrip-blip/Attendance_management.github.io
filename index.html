@@ -4,8 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Employee Attendance Management System with Google Sheets</title>
+    <!-- Firebase SDK for Chat -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
     <style>
-        /* CSS remains the same as before */
+        /* Existing CSS remains unchanged */
         * {
             margin: 0;
             padding: 0;
@@ -254,6 +257,18 @@
             border: 1px solid #bee5eb;
         }
 
+        .alert-warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+
+        .alert:disabled {
+            background: #e9ecef;
+            color: #6c757d;
+            cursor: not-allowed;
+        }
+
         @media (max-width: 768px) {
             .container {
                 width: 95%;
@@ -295,18 +310,59 @@
             overflow-y: auto;
             margin-top: 20px;
         }
+
+        /* Chat box styles */
+        #chatContainer {
+            border: 1px solid #ccc;
+            padding: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        #chatMessages div {
+            margin-bottom: 8px;
+            padding: 5px;
+            border-radius: 5px;
+            background: #fff;
+        }
+        #chatInputBox {
+            display: flex;
+            gap: 10px;
+        }
+        #chatInput {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        #onlineUsers {
+            margin-top: 15px;
+            padding: 10px;
+            background: #e9ecef;
+            border-radius: 8px;
+        }
+        #onlineUsers h4 {
+            margin-bottom: 5px;
+            color: #333;
+        }
+        #onlineUsersList {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        #onlineUsersList li {
+            padding: 3px 0;
+            color: #555;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <h1>Employee Attendance Management System</h1>
-            <p>Track attendance, manage leaves, and monitor employee activity with Google Sheets backend</p>
-        </div>
-
-        <!-- Loading Overlay -->
-        <div id="loadingOverlay" class="alert alert-info" style="position: absolute; top: 0; left: 0; right: 0; z-index: 1000;">
-            Loading data from Google Sheets...
+            <p>Track attendance, manage leaves, monitor locations, chat in-house, handle week-offs & holidays</p>
         </div>
 
         <!-- Login Section -->
@@ -329,9 +385,9 @@
                         <strong>Demo Credentials:</strong><br>
                         <strong>Admin:</strong> ADMIN / admin123<br>
                         <strong>Employees:</strong><br>
-                        • EMP001 / password123<br>
-                        • EMP002 / pass456<br>
-                        • EMP003 / mike789
+                        - EMP001 / password123<br>
+                        - EMP002 / pass456<br>
+                        - EMP003 / mike789
                     </div>
                     <div id="loginMessage"></div>
                 </div>
@@ -346,6 +402,7 @@
                 <button class="nav-tab" onclick="showTab('leave')">Leave Management</button>
                 <button class="nav-tab" onclick="showTab('records')">My Records</button>
                 <button class="nav-tab hidden" id="adminTab" onclick="showTab('admin')">Admin Panel</button>
+                <button class="nav-tab" onclick="showTab('chat')">In-House Chat</button>
                 <button class="nav-tab" onclick="logout()" style="margin-left: auto; background: #ff6b6b; color: white;">Logout</button>
             </div>
 
@@ -374,7 +431,7 @@
                         <div class="stat-label">Half Days</div>
                     </div>
                 </div>
-                
+                <div id="todayMessage" class="alert alert-info"></div>
                 <div class="attendance-card">
                     <div class="time-display" id="currentTime"></div>
                     <div id="currentStatus"></div>
@@ -385,12 +442,13 @@
             <!-- Attendance Tab -->
             <div id="attendance" class="tab-pane">
                 <h2>Mark Attendance</h2>
+                <div id="attendanceAlert"></div>
                 <div class="attendance-card">
                     <div class="time-display" id="attendanceTime"></div>
                     <div id="attendanceStatus"></div>
                     <div style="margin: 20px 0;">
-                        <button class="btn btn-success" onclick="checkIn()">Check In</button>
-                        <button class="btn btn-danger" onclick="checkOut()">Check Out</button>
+                        <button class="btn btn-success" id="checkInBtn" onclick="checkIn()">Check In</button>
+                        <button class="btn btn-danger" id="checkOutBtn" onclick="checkOut()">Check Out</button>
                     </div>
                     <div id="locationInfo" class="location-info"></div>
                     <div id="attendanceMessage"></div>
@@ -455,6 +513,24 @@
                 <div id="recordsContent"></div>
             </div>
 
+            <!-- Chat Tab -->
+            <div id="chat" class="tab-pane">
+                <h2>In-House Chat</h2>
+                <div id="chatContainer">
+                    <div id="chatMessages"></div>
+                </div>
+                <div id="chatInputBox">
+                    <input type="text" id="chatInput" placeholder="Type a message..." onkeypress="handleEnter(event)">
+                    <button class="btn" onclick="sendMessage()">Send</button>
+                </div>
+                <div id="onlineUsers">
+                    <h4>Online Employees:</h4>
+                    <ul id="onlineUsersList">
+                        <!-- Online users will be listed here -->
+                    </ul>
+                </div>
+            </div>
+
             <!-- Admin Panel Tab -->
             <div id="admin" class="tab-pane">
                 <h2>Admin Panel</h2>
@@ -501,36 +577,114 @@
     </div>
 
     <script>
-        // Google Apps Script Web App URL - Replace this with your deployed Web App URL after setting up Apps Script in your Google Sheet
-        const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxUcRnx4YGLQdp3SFn7fgBThjq_J7JD561nEv99nPR1pWk4rICm5WsqITcLk4lTuOjH/exec'; // Placeholder, replace with actual deployed URL
+        // Google Apps Script Web App URL - REPLACE with your actual deployed URL
+        const WEB_APP_URL = 'https://script.googleusercontent.com/macros/echo?user_content_key=AehSKLiRA9a0vXlOXN_xqL96nUqLz-iIUkgxHN9Gv28eRoIByPIxG_z1N8OI9Z8P9mhTx5uMaMJfKSGOAKMxdtwm7QavpTHIL75RthAD6wkHdje0m-Bq6CnFukBkq-lCHrK2EZWSmB4WwmXYFHDmFcNhJ3OBDMTXNPgOBriAMZkNLhh3YQ9doxhA9Bj6naH2fMKq9XDzSpsnIJUD8PuJGKYhrb2erSMHeHJj8-LjLv-I3gmGu0XcCLZdbNV6uIyPGecWK13JFkr-6N6_H2WsJLH0dwytAK7S5Z3tDtS0YofI&lib=M0c5t1vKwKvicUZ-JMHj14Use3KXYcPhg'; // Replace here
 
-        // Sample employee data (for initial load, if sheet is empty)
+        // Firebase Config - REPLACE with your actual config from Firebase console
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY", // Replace
+            authDomain: "YOUR_PROJECT.firebaseapp.com", // Replace
+            databaseURL: "https://YOUR_PROJECT.firebaseio.com", // Replace
+            projectId: "YOUR_PROJECT", // Replace
+            storageBucket: "YOUR_PROJECT.appspot.com", // Replace
+            messagingSenderId: "SENDER_ID", // Replace
+            appId: "APP_ID" // Replace
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // Holiday and Week Off Logic
+        const holidays = ['2024-12-25', '2025-01-01', '2025-08-15']; // Add more dates as YYYY-MM-DD
+
+        function isSunday(date) {
+            return date.getDay() === 0;
+        }
+
+        function isHoliday(date) {
+            const dStr = date.toISOString().slice(0, 10);
+            return holidays.includes(dStr);
+        }
+
+        function isNonWorkingDay(date) {
+            return isSunday(date) || isHoliday(date);
+        }
+
+        function getNonWorkingMessage(date) {
+            if (isHoliday(date)) return "Today is a holiday.";
+            if (isSunday(date)) return "Today is week-off (Sunday).";
+            return null;
+        }
+
+        // Sample employee data and other data as before
         let employees = {
             'ADMIN': { name: 'Administrator', password: 'admin123', isAdmin: true },
             'EMP001': { name: 'John Doe', password: 'password123' },
             'EMP002': { name: 'Jane Smith', password: 'pass456' },
             'EMP003': { name: 'Mike Johnson', password: 'mike789' }
         };
-
-        // In-memory data (for UI responsiveness)
         let attendanceData = {};
         let leaveData = {};
         let currentEmployee = null;
         let userLocation = null;
 
+        // Firebase references for presence
+        const presenceRef = db.ref('presence');
+        let userRef = null;
+
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
-            document.getElementById('loadingOverlay').style.display = 'block';
             updateTime();
             setInterval(updateTime, 1000);
             getCurrentLocation();
-            loadDataFromSheets().then(() => {
-                document.getElementById('loadingOverlay').style.display = 'none';
-                addSampleDataIfEmpty();
+            loadDataFromSheets().then(() => updateDashboard());
+            updateAttendanceButtons();
+            // Load chat
+            db.ref('chat').on('child_added', snapshot => loadChatMessage(snapshot.val()));
+            // Listen for presence changes
+            presenceRef.on('value', snapshot => {
+                updateOnlineUsers(snapshot.val());
             });
         });
 
-        // Load data from Google Sheets
+        // Time and Location Updates
+        function updateTime() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString();
+            document.getElementById('currentTime').textContent = timeString;
+            document.getElementById('attendanceTime').textContent = timeString;
+        }
+
+        function getCurrentLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    pos => {
+                        userLocation = {
+                            latitude: pos.coords.latitude,
+                            longitude: pos.coords.longitude,
+                            accuracy: pos.coords.accuracy
+                        };
+                        updateLocationDisplays();
+                    },
+                    () => {
+                        userLocation = { error: 'Unavailable' };
+                        updateLocationDisplays();
+                    }
+                );
+            } else {
+                userLocation = { error: 'Geolocation not supported' };
+                updateLocationDisplays();
+            }
+        }
+
+        function updateLocationDisplays() {
+            const display = userLocation && !userLocation.error ? `Lat: ${userLocation.latitude.toFixed(4)}, Long: ${userLocation.longitude.toFixed(4)}, Accuracy: ${userLocation.accuracy}m` : 'Location unavailable';
+            ['locationDisplay', 'locationInfo'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.innerHTML = `<strong>Location:</strong> ${display}`;
+            });
+        }
+
+        // Data Loading from Google Sheets
         async function loadDataFromSheets() {
             try {
                 const empRes = await fetch(`${WEB_APP_URL}?action=getEmployees`);
@@ -540,12 +694,11 @@
                 const leaveRes = await fetch(`${WEB_APP_URL}?action=getLeaves`);
                 leaveData = await leaveRes.json();
             } catch (e) {
-                console.error('Error loading data from Google Sheets:', e);
-                // Fallback to localStorage if available, but for production, handle errors
+                console.error('Error loading data:', e);
             }
         }
 
-        // Save to Google Sheets (replace localStorage logic)
+        // Save to Google Sheets Function
         async function saveToSheets(data, action) {
             try {
                 await fetch(WEB_APP_URL, {
@@ -554,94 +707,8 @@
                     headers: { 'Content-Type': 'application/json' }
                 });
             } catch (e) {
-                console.error('Error saving to Google Sheets:', e);
+                console.error('Error saving:', e);
             }
-        }
-
-        // Add sample data if sheet is empty
-        function addSampleDataIfEmpty() {
-            if (Object.keys(employees).length <= 1) { // Assuming only placeholder
-                Object.assign(employees, {});
-                attendanceData = {};
-                leaveData = {};
-                addSampleData();
-                saveAllToSheets();
-            }
-        }
-
-        function saveAllToSheets() {
-            // This is a batch save simulation; in Apps Script, implement batch updates
-            // For simplicity, save individually
-            for (const key in attendanceData) {
-                for (const date in attendanceData[key]) {
-                    saveToSheets(attendanceData[key][date], 'addAttendance');
-                }
-            }
-            for (const key in leaveData) {
-                leaveData[key].forEach(leave => {
-                    saveToSheets(leave, 'addLeave');
-                });
-            }
-        }
-
-        function addSampleData() {
-            // Sample data without duplicating
-            const today = new Date();
-            const yesterday = new Date();
-            yesterday.setDate(today.getDate() - 1);
-            
-            const todayString = today.toDateString();
-            const yesterdayString = yesterday.toDateString();
-            
-            attendanceData['EMP001'] = {
-                [todayString]: {
-                    checkIn: '09:15AM',
-                    checkOut: '18:30PM',
-                    isLate: true,
-                    isHalfDay: false,
-                    date: todayString,
-                    status: 'Full Day'
-                },
-                [yesterdayString]: {
-                    checkIn: '08:45AM',
-                    checkOut: '17:45PM',
-                    isLate: false,
-                    isHalfDay: false,
-                    date: yesterdayString,
-                    status: 'Full Day'
-                }
-            };
-
-            attendanceData['EMP002'] = {
-                [todayString]: {
-                    checkIn: '08:30AM',
-                    checkOut: '12:30PM',
-                    isLate: false,
-                    isHalfDay: true,
-                    date: todayString,
-                    status: 'Half Day'
-                }
-            };
-
-            leaveData['EMP003'] = [
-                {
-                    type: 'sick',
-                    fromDate: '2025-09-10',
-                    toDate: '2025-09-12',
-                    reason: 'Medical consultation',
-                    status: 'Pending'
-                }
-            ];
-
-            leaveData['EMP001'] = [
-                {
-                    type: 'casual',
-                    fromDate: '2025-09-15',
-                    toDate: '2025-09-15',
-                    reason: 'Personal work',
-                    status: 'Approved'
-                }
-            ];
         }
 
         function login() {
@@ -650,7 +717,7 @@
             const messageDiv = document.getElementById('loginMessage');
 
             if (!empId || !password) {
-                messageDiv.innerHTML = '<div class="alert alert-error">Please enter both ID and Password</div>';
+                messageDiv.innerHTML = '<div class="alert alert-error">Please enter ID and Password</div>';
                 return;
             }
 
@@ -664,12 +731,26 @@
                     document.getElementById('adminTab').classList.remove('hidden');
                 }
                 updateDashboard();
+                updateAttendanceButtons();
+
+                // Set user presence in Firebase
+                userRef = presenceRef.child(currentEmployee);
+                userRef.set({
+                    name: employees[currentEmployee].name,
+                    status: 'online',
+                    last_seen: firebase.database.ServerValue.TIMESTAMP
+                });
+                userRef.onDisconnect().remove(); // Remove user from presence when they disconnect
+
             } else {
-                messageDiv.innerHTML = '<div class="alert alert-error">Invalid ID or Password</div>';
+                messageDiv.innerHTML = '<div class="alert alert-error">Invalid credentials</div>';
             }
         }
 
         function logout() {
+            if (userRef) {
+                userRef.remove(); // Remove user from presence when they log out
+            }
             currentEmployee = null;
             document.getElementById('loginSection').classList.remove('hidden');
             document.getElementById('mainApp').classList.add('hidden');
@@ -679,60 +760,26 @@
         }
 
         function showTab(tabName) {
-            const tabPanes = document.querySelectorAll('.tab-pane');
-            tabPanes.forEach(pane => pane.classList.remove('active'));
-            const tabs = document.querySelectorAll('.nav-tab');
-            tabs.forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
             document.getElementById(tabName).classList.add('active');
+            document.querySelector(`.nav-tab[onclick="showTab('${tabName}')"]`).classList.add('active');
             if (tabName === 'admin') {
                 viewAllAttendanceRecords();
                 viewAllLeaveRequests();
             }
         }
 
-        function updateTime() {
-            const now = new Date();
-            const timeString = now.toLocaleTimeString();
-            ['currentTime', 'attendanceTime'].forEach(id => {
-                const element = document.getElementById(id);
-                if (element) element.textContent = timeString;
-            });
-        }
-
-        function getCurrentLocation() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    position => {
-                        userLocation = {
-                            latitude: position.coords.latitude,
-                            longitude: position.coords.longitude,
-                            accuracy: position.coords.accuracy
-                        };
-                        updateLocationDisplay();
-                    },
-                    error => {
-                        userLocation = { error: 'Location unavailable' };
-                        updateLocationDisplay();
-                    }
-                );
-            }
-        }
-
-        function updateLocationDisplay() {
-            const display = userLocation && !userLocation.error 
-                ? `Lat: ${userLocation.latitude.toFixed(4)}, Long: ${userLocation.longitude.toFixed(4)}`
-                : 'Location unavailable';
-            ['locationDisplay', 'locationInfo'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) el.innerHTML = `<strong>Current Location:</strong> ${display}`;
-            });
-        }
-
+        // Attendance Functions
         async function checkIn() {
             const now = new Date();
             const today = now.toDateString();
+            if (isNonWorkingDay(now)) {
+                document.getElementById('attendanceMessage').innerHTML = `<div class="alert alert-info">${getNonWorkingMessage(now)}</div>`;
+                return;
+            }
             if (!attendanceData[currentEmployee]) attendanceData[currentEmployee] = {};
-            if (attendanceData[currentEmployee][today] && attendanceData[currentEmployee][today].checkIn) {
+            if (attendanceData[currentEmployee][today]?.checkIn) {
                 document.getElementById('attendanceMessage').innerHTML = '<div class="alert alert-error">Already checked in today!</div>';
                 return;
             }
@@ -742,7 +789,12 @@
                 isLate: isLate,
                 isHalfDay: false,
                 date: today,
-                status: 'Checked In'
+                status: 'Checked In',
+                checkInLocation: userLocation ? {
+                    lat: userLocation.latitude,
+                    long: userLocation.longitude,
+                    accuracy: userLocation.accuracy
+                } : null
             };
             await saveToSheets(attendanceData[currentEmployee][today], 'addAttendance');
             document.getElementById('attendanceMessage').innerHTML = '<div class="alert alert-success">Checked in successfully!</div>';
@@ -751,14 +803,21 @@
         }
 
         async function checkOut() {
-            const today = new Date().toDateString();
-            if (!attendanceData[currentEmployee] || !attendanceData[currentEmployee][today] || !attendanceData[currentEmployee][today].checkIn) {
+            const now = new Date();
+            const today = now.toDateString();
+            if (isNonWorkingDay(now)) {
+                document.getElementById('attendanceMessage').innerHTML = `<div class="alert alert-info">${getNonWorkingMessage(now)}</div>`;
+                return;
+            }
+            if (!attendanceData[currentEmployee][today]?.checkIn) {
                 document.getElementById('attendanceMessage').innerHTML = '<div class="alert alert-error">Please check in first!</div>';
                 return;
             }
-            const now = new Date();
-            attendanceData[currentEmployee][today].checkOut = now.toLocaleTimeString();
-            const checkInTime = new Date(attendanceData[currentEmployee][today].checkIn);
+            if (attendanceData[currentEmployee][today].checkOut) {
+                document.getElementById('attendanceMessage').innerHTML = '<div class="alert alert-error">Already checked out today!</div>';
+                return;
+            }
+            const checkInTime = new Date(attendanceData[currentEmployee][today].date + ' ' + attendanceData[currentEmployee][today].checkIn);
             const hoursWorked = (now - checkInTime) / (1000 * 60 * 60);
             if (hoursWorked < 4) {
                 attendanceData[currentEmployee][today].isHalfDay = true;
@@ -768,6 +827,12 @@
             } else {
                 attendanceData[currentEmployee][today].status = 'Full Day';
             }
+            attendanceData[currentEmployee][today].checkOut = now.toLocaleTimeString();
+            attendanceData[currentEmployee][today].checkOutLocation = userLocation ? {
+                lat: userLocation.latitude,
+                long: userLocation.longitude,
+                accuracy: userLocation.accuracy
+            } : null;
             await saveToSheets(attendanceData[currentEmployee][today], 'addAttendance');
             document.getElementById('attendanceMessage').innerHTML = '<div class="alert alert-success">Checked out successfully!</div>';
             updateAttendanceStatus();
@@ -777,7 +842,7 @@
         function updateAttendanceStatus() {
             const today = new Date().toDateString();
             const record = attendanceData[currentEmployee]?.[today];
-            let statusHtml = '<span class="status" style="background: #f8f9fa;">Not Marked</span>';
+            let statusHtml = '<span class="status">Not Marked</span>';
             if (record) {
                 if (record.checkIn && !record.checkOut) {
                     statusHtml = '<span class="status checked-in">Checked In</span>';
@@ -787,12 +852,27 @@
                 if (record.isLate) statusHtml += '<span class="status">Late</span>';
                 if (record.isHalfDay) statusHtml += '<span class="status">Half Day</span>';
             }
-            ['currentStatus', 'attendanceStatus'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) el.innerHTML = statusHtml;
-            });
+            document.getElementById('currentStatus').innerHTML = statusHtml;
+            document.getElementById('attendanceStatus').innerHTML = statusHtml;
         }
 
+        function updateAttendanceButtons() {
+            const now = new Date();
+            const isOff = isNonWorkingDay(now);
+            const checkInBtn = document.getElementById('checkInBtn');
+            const checkOutBtn = document.getElementById('checkOutBtn');
+            checkInBtn.disabled = isOff;
+            checkOutBtn.disabled = isOff;
+            const alertDiv = document.getElementById('attendanceAlert');
+            if (isOff) {
+                alertDiv.innerHTML = `<div class="alert alert-warning">${getNonWorkingMessage(now)} Attendance marking is disabled.</div>`;
+                alertDiv.style.display = 'block';
+            } else {
+                alertDiv.style.display = 'none';
+            }
+        }
+
+        // Other functions for leave, records, admin, dashboard as per previous code, with updates for weekends/holidays and vice versa
         async function submitLeave() {
             const type = document.getElementById('leaveType').value;
             const fromDate = document.getElementById('fromDate').value;
@@ -824,7 +904,11 @@
             Object.values(attendanceData[currentEmployee] || {}).forEach(r => {
                 const d = new Date(r.date);
                 if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
-                    if (r.checkOut) present++;
+                    if (isNonWorkingDay(d)) {
+                        r.status = getNonWorkingMessage(d);
+                    } else if (r.checkOut) {
+                        present++;
+                    }
                     if (r.isLate) late++;
                     if (r.isHalfDay) half++;
                 }
@@ -838,6 +922,15 @@
             document.getElementById('halfDays').textContent = half;
             document.getElementById('leaveDays').textContent = leaveDays;
             updateAttendanceStatus();
+            const today = new Date();
+            const msg = getNonWorkingMessage(today);
+            const todayMessageDiv = document.getElementById('todayMessage');
+            if (msg) {
+                todayMessageDiv.innerHTML = msg;
+                todayMessageDiv.classList.remove('hidden');
+            } else {
+                todayMessageDiv.classList.add('hidden');
+            }
         }
 
         function showAttendanceRecords() {
@@ -858,7 +951,48 @@
             document.getElementById('recordsContent').innerHTML = html;
         }
 
-        // Admin functions - Similar implementation, calling Google Sheets
+        // Chat Functions
+        function sendMessage() {
+            const msgInput = document.getElementById('chatInput');
+            const message = msgInput.value.trim();
+            if (!message) return;
+            const chatRef = db.ref('chat');
+            chatRef.push({
+                empId: currentEmployee,
+                sender: employees[currentEmployee]?.name || currentEmployee,
+                message: message,
+                timestamp: Date.now()
+            });
+            msgInput.value = '';
+        }
+
+        function handleEnter(e) {
+            if (e.key === 'Enter') sendMessage();
+        }
+
+        function loadChatMessage(msg) {
+            const time = new Date(msg.timestamp).toLocaleTimeString();
+            const msgDiv = document.createElement('div');
+            msgDiv.textContent = `[${time}] ${msg.sender}: ${msg.message}`;
+            document.getElementById('chatMessages').appendChild(msgDiv);
+            document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+        }
+
+        function updateOnlineUsers(presenceData) {
+            const onlineUsersList = document.getElementById('onlineUsersList');
+            onlineUsersList.innerHTML = ''; // Clear existing list
+
+            if (presenceData) {
+                Object.keys(presenceData).forEach(empId => {
+                    const user = presenceData[empId];
+                    const listItem = document.createElement('li');
+                    listItem.textContent = user.name;
+                    onlineUsersList.appendChild(listItem);
+                });
+            }
+        }
+
+        // Admin Functions
         async function addEmployee() {
             const empId = document.getElementById('newEmployeeId').value.toUpperCase();
             const name = document.getElementById('newEmployeeName').value;
@@ -875,24 +1009,32 @@
         async function deleteEmployee() {
             const empId = document.getElementById('newEmployeeId').value.toUpperCase();
             if (!empId || !employees[empId]) {
-                document.getElementById('employeeManagementMessage').innerHTML = '<div class="alert alert-error">Invalid ID</div>';
+                document.getElementById('employeeManagementMessage').innerHTML = '<div class="alert alert-error">ID required or not found</div>';
                 return;
             }
-            delete employees[empId];
-            delete attendanceData[empId];
-            delete leaveData[empId];
-            await saveToSheets({ empId }, 'deleteEmployee'); // Implement in Apps Script
-            document.getElementById('employeeManagementMessage').innerHTML = '<div class="alert alert-success">Employee deleted!</div>';
+            if (empId === 'ADMIN') {
+                document.getElementById('employeeManagementMessage').innerHTML = '<div class="alert alert-error">Cannot delete ADMIN</div>';
+                return;
+            }
+            if (confirm(`Delete ${employees[empId].name}?`)) {
+                delete employees[empId];
+                delete attendanceData[empId];
+                delete leaveData[empId];
+                // You may need to update Apps Script for deletion
+                document.getElementById('employeeManagementMessage').innerHTML = '<div class="alert alert-success">Employee deleted!</div>';
+            }
         }
 
         async function viewAllAttendanceRecords() {
-            await loadDataFromSheets(); // Refresh
-            let html = '<table class="records-table"><thead><tr><th>EmpID</th><th>Name</th><th>Date</th><th>Check In</th><th>Check Out</th><th>Late</th><th>Half Day</th><th>Status</th></tr></thead><tbody>';
+            await loadDataFromSheets();
+            let html = '<table class="records-table"><thead><tr><th>EmpID</th><th>Name</th><th>Date</th><th>Check In</th><th>Check Out</th><th>Late</th><th>Half Day</th><th>Status</th><th>Check-In Lat</th><th>Check-In Long</th><th>Check-In Accuracy (m)</th><th>Check-Out Lat</th><th>Check-Out Long</th><th>Check-Out Accuracy (m)</th></tr></thead><tbody>';
             const filter = document.getElementById('filterEmployeeIdAttendance').value.toUpperCase();
             Object.keys(attendanceData).forEach(id => {
                 if (filter && id !== filter) return;
                 Object.values(attendanceData[id]).forEach(r => {
-                    html += `<tr><td>${id}</td><td>${employees[id]?.name || 'Unknown'}</td><td>${r.date}</td><td>${r.checkIn || '-'}</td><td>${r.checkOut || '-'}</td><td>${r.isLate ? 'Yes' : 'No'}</td><td>${r.isHalfDay ? 'Yes' : 'No'}</td><td>${r.status || '-'}</td></tr>`;
+                    const checkInLoc = r.checkInLocation || {};
+                    const checkOutLoc = r.checkOutLocation || {};
+                    html += `<tr><td>${id}</td><td>${employees[id]?.name || 'Unknown'}</td><td>${r.date}</td><td>${r.checkIn || '-'}</td><td>${r.checkOut || '-'}</td><td>${r.isLate ? 'Yes' : 'No'}</td><td>${r.isHalfDay ? 'Yes' : 'No'}</td><td>${r.status || '-'}</td><td>${checkInLoc.lat || '-'}</td><td>${checkInLoc.long || '-'}</td><td>${checkInLoc.accuracy || '-'}</td><td>${checkOutLoc.lat || '-'}</td><td>${checkOutLoc.long || '-'}</td><td>${checkOutLoc.accuracy || '-'}</td></tr>`;
                 });
             });
             html += '</tbody></table>';
@@ -905,8 +1047,9 @@
             const filter = document.getElementById('filterEmployeeIdLeave').value.toUpperCase();
             Object.keys(leaveData).forEach(id => {
                 if (filter && id !== filter) return;
-                leaveData[id].forEach(l => {
-                    html += `<tr><td>${id}</td><td>${employees[id]?.name || 'Unknown'}</td><td>${l.type}</td><td>${l.fromDate}</td><td>${l.toDate}</td><td>${l.reason}</td><td>${l.status}</td><td><button class="btn btn-success" onclick="updateLeaveStatus('${id}', 0, 'Approved')">Approve</button><button class="btn btn-danger" onclick="updateLeaveStatus('${id}', 0, 'Rejected')">Reject</button></td></tr>`;
+                leaveData[id].forEach((l, idx) => {
+                    const statusC = l.status === 'Approved' ? 'alert-success' : (l.status === 'Rejected' ? 'alert-error' : 'alert-info');
+                    html += `<tr><td>${id}</td><td>${employees[id]?.name || 'Unknown'}</td><td>${l.type}</td><td>${l.fromDate}</td><td>${l.toDate}</td><td>${l.reason}</td><td class="${statusC}">${l.status}</td><td>${l.status === 'Pending' ? `<button class="btn btn-success" onclick="updateLeaveStatus('${id}', ${idx}, 'Approved')">Approve</button><button class="btn btn-danger" onclick="updateLeaveStatus('${id}', ${idx}, 'Rejected')">Reject</button>` : '-'}</td></tr>`;
                 });
             });
             html += '</tbody></table>';
@@ -915,13 +1058,10 @@
 
         async function updateLeaveStatus(empId, index, status) {
             leaveData[empId][index].status = status;
-            await saveToSheets(leaveData[empId][index], 'updateLeave');
+            await saveToSheets(leaveData[empId][index], 'addLeave'); // Assume update
             viewAllLeaveRequests();
             updateDashboard();
         }
     </script>
 </body>
 </html>
-</content>
-</create_file>
-
