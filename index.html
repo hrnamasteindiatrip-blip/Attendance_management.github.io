@@ -1,1072 +1,400 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Employee Attendance Management System with Google Sheets</title>
-    <!-- Firebase SDK for Chat -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
-    <style>
-        /* Existing CSS remains unchanged */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+```jsx
+/*
+README
+=====
+KailashSchedule Component
+- Displays departure schedules for Kailash Mansarovar tours, grouped by route.
+- Data-driven: Edit the DATA const to update routes, dates, durations.
+- Customization:
+  - Labels/Placeholders: Modify render strings for prices (e.g., '$2,500'), seats (e.g., '15'), or add dynamic props.
+  - Full Moon Hints: Edit "fullMoonHint" in DATA; component parses for marking.
+  - Default Year: Computed as current year + 1; override via year prop.
+- Exports: CSV for filtered list; per-departure ICS download or Google Calendar link.
+- Filters: Route, month, search, full-moon toggle.
+- Accessibility: Semantic elements, ARIA labels, keyboard-navigable.
+- Validation: Console warns on invalid dates (e.g., Feb 30).
+- Usage: See example at bottom. Requires Tailwind CSS in parent app.
+*/
+
+import React, { useState, useMemo } from 'react';
+
+const monthMap = {
+  Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6,
+  Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12
+};
+
+const DATA = {
+  "routes": [
+    {
+      "id": "land_kerung",
+      "title": "Land Route (Ex-Nepal – Kerung Border)",
+      "duration": "13 Nights / 14 Days",
+      "dates": [
+        {"md": "May-24", "fullMoonHint": "31 May"},
+        {"md": "May-31", "fullMoonHint": "31 May"},
+        {"md": "Jun-02", "fullMoonHint": "29 Jun"},
+        {"md": "Jun-15", "fullMoonHint": "29 Jun"},
+        {"md": "Jun-22", "fullMoonHint": "29 Jun"},
+        {"md": "Jul-04", "fullMoonHint": "10 Jul"},
+        {"md": "Jul-15", "fullMoonHint": null},
+        {"md": "Jul-22", "fullMoonHint": "29 Jul"},
+        {"md": "Aug-15", "fullMoonHint": null},
+        {"md": "Aug-21", "fullMoonHint": "28 Aug"},
+        {"md": "Sep-04", "fullMoonHint": null},
+        {"md": "Sep-19", "fullMoonHint": "26 Sep"}
+      ]
+    },
+    {
+      "id": "heli_lucknow",
+      "title": "Heli Route (Ex-Lucknow/Nepalgunj)",
+      "duration": "8 Nights / 9 Days",
+      "dates": [
+        {"md": "May-26", "fullMoonHint": "31 May"},
+        {"md": "Jun-24", "fullMoonHint": "29 Jun"},
+        {"md": "Jul-24", "fullMoonHint": "29 Jul"},
+        {"md": "Aug-05", "fullMoonHint": "28 Aug"},
+        {"md": "Aug-15", "fullMoonHint": null},
+        {"md": "Aug-23", "fullMoonHint": "28 Aug"},
+        {"md": "Sep-05", "fullMoonHint": "26 Sep"},
+        {"md": "Sep-22", "fullMoonHint": "26 Sep"}
+      ]
+    },
+    {
+      "id": "heli_kathmandu",
+      "title": "Heli Route (Ex-Kathmandu)",
+      "duration": "10 Nights / 11 Days",
+      "dates": [
+        {"md": "May-25", "fullMoonHint": "31 May"},
+        {"md": "Jun-23", "fullMoonHint": "29 Jun"},
+        {"md": "Jul-23", "fullMoonHint": "29 Jul"},
+        {"md": "Aug-04", "fullMoonHint": "28 Aug"},
+        {"md": "Aug-14", "fullMoonHint": null},
+        {"md": "Aug-22", "fullMoonHint": "28 Aug"},
+        {"md": "Sep-04", "fullMoonHint": null},
+        {"md": "Sep-21", "fullMoonHint": "26 Sep"}
+      ]
+    }
+  ]
+};
+
+// Helper: Parse md + year to date object, validate, compute fields
+function computeDatesForRoute(route, year) {
+  return route.dates
+    .map(d => {
+      const [monthStr, dayStr] = d.md.split('-');
+      const month = monthMap[monthStr];
+      const day = parseInt(dayStr, 10);
+      if (!month || isNaN(day) || day < 1 || day > 31) {
+        console.warn(`Invalid md format: ${d.md}`);
+        return null;
+      }
+      const date = new Date(year, month - 1, day);
+      if (
+        isNaN(date.getTime()) ||
+        date.getMonth() !== month - 1 ||
+        date.getDate() !== day
+      ) {
+        console.warn(`Invalid date: ${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`);
+        return null;
+      }
+      const iso = date.toISOString().split('T')[0];
+      const formatted = date.toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
+      });
+      const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
+      let isFullMoon = false;
+      let fullMoonHint = null;
+      if (d.fullMoonHint) {
+        fullMoonHint = d.fullMoonHint;
+        const fmParts = d.fullMoonHint.split(' ');
+        const fmDay = parseInt(fmParts[0], 10);
+        if (fmDay === day) {
+          isFullMoon = true;
         }
+      }
+      return { date, iso, formatted, weekday, isFullMoon, fullMoonHint };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+}
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
+// Helper: Generate and download ICS for all-day event
+function downloadICS(event) {
+  const start = event.start.replace(/-/g, '');
+  const dtstamp = new Date().toISOString().replace(/[:-]/g, '').split('.')[0] + 'Z';
+  const uid = `kailash-${Date.now()}@example.com`;
+  let summary = event.summary.replace(/,/g, '\\,').replace(/;/g, '\\;').replace(/\n/g, '\\n');
+  let description = event.details.replace(/,/g, '\\,').replace(/;/g, '\\;').replace(/\n/g, '\\n');
+  const icsContent = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//xAI//Kailash Schedule//EN
+BEGIN:VEVENT
+UID:${uid}
+DTSTAMP:${dtstamp}
+DTSTART;VALUE=DATE:${start}
+SUMMARY:${summary}
+DESCRIPTION:${description}
+END:VEVENT
+END:VCALENDAR`;
+  const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `kailash_departure_${event.start}.ics`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
 
-        .container {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            width: 90%;
-            max-width: 1200px;
-            min-height: 600px;
-            overflow: hidden;
-        }
+// Helper: Open Google Calendar event link
+function openGoogleCalendar(event) {
+  const startDate = new Date(event.start + 'T00:00:00');
+  const endDate = new Date(startDate.getTime() + 86400000);
+  const startStr = startDate.toISOString().slice(0, 10).replace(/-/g, '');
+  const endStr = endDate.toISOString().slice(0, 10).replace(/-/g, '');
+  const text = encodeURIComponent(event.summary);
+  const details = encodeURIComponent(event.details);
+  const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${text}&dates=${startStr}/${endStr}&details=${details}`;
+  window.open(url, '_blank');
+}
 
-        .header {
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            color: white;
-            padding: 20px;
-            text-align: center;
-        }
+// Helper: Generate and download CSV
+function downloadCSV(rows, filename) {
+  if (rows.length === 0) return;
+  const headers = Object.keys(rows[0]);
+  const csvContent = [
+    headers.join(','),
+    ...rows.map(row => headers.map(header => JSON.stringify(row[header] || '')).join(','))
+  ].join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
 
-        .nav-tabs {
-            display: flex;
-            background: #f8f9fa;
-            border-bottom: 1px solid #ddd;
-        }
+const KailashSchedule = ({ year, onBook }) => {
+  const effectiveYear = year || new Date().getFullYear() + 1;
 
-        .nav-tab {
-            flex: 1;
-            padding: 15px;
-            background: none;
-            border: none;
-            cursor: pointer;
-            font-size: 16px;
-            transition: all 0.3s;
-            border-bottom: 3px solid transparent;
-        }
+  const [selectedRoute, setSelectedRoute] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [onlyFullMoon, setOnlyFullMoon] = useState(false);
 
-        .nav-tab.active {
-            background: white;
-            border-bottom: 3px solid #4facfe;
-            color: #4facfe;
-            font-weight: bold;
-        }
+  const allMonths = useMemo(() => {
+    const months = new Set();
+    DATA.routes.forEach(r => {
+      r.dates.forEach(d => {
+        const monthStr = d.md.split('-')[0];
+        months.add(monthStr);
+      });
+    });
+    return Array.from(months).sort((a, b) => (monthMap[a] || 0) - (monthMap[b] || 0));
+  }, []);
 
-        .tab-content {
-            padding: 30px;
-            min-height: 500px;
-        }
-
-        .tab-pane {
-            display: none;
-        }
-
-        .tab-pane.active {
-            display: block;
-        }
-
-        .login-form {
-            max-width: 400px;
-            margin: 0 auto;
-            padding: 40px;
-            background: #f8f9fa;
-            border-radius: 15px;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: bold;
-            color: #333;
-        }
-
-        input, select, textarea {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            font-size: 14px;
-            transition: border-color 0.3s;
-        }
-
-        input:focus, select:focus, textarea:focus {
-            outline: none;
-            border-color: #4facfe;
-        }
-
-        .btn {
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            color: white;
-            padding: 12px 24px;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 16px;
-            transition: transform 0.2s;
-            margin: 5px;
-        }
-
-        .btn:hover {
-            transform: translateY(-2px);
-        }
-
-        .btn-danger {
-            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
-        }
-
-        .btn-success {
-            background: linear-gradient(135deg, #06d6a0 0%, #118a7e 100%);
-        }
-
-        .attendance-card {
-            background: white;
-            border-radius: 15px;
-            padding: 30px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            text-align: center;
-            margin-bottom: 30px;
-        }
-
-        .time-display {
-            font-size: 48px;
-            font-weight: bold;
-            color: #4facfe;
-            margin-bottom: 20px;
-        }
-
-        .status {
-            display: inline-block;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-weight: bold;
-            margin: 5px;
-        }
-
-        .status.checked-in {
-            background: #d4edda;
-            color: #155724;
-        }
-
-        .status.checked-out {
-            background: #f8d7da;
-            color: #721c24;
-        }
-
-        .records-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-            background: white;
-            border-radius: 10px;
-            overflow: hidden;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-        }
-
-        .records-table th {
-            background: #4facfe;
-            color: white;
-            padding: 15px;
-            text-align: left;
-        }
-
-        .records-table td {
-            padding: 12px 15px;
-            border-bottom: 1px solid #eee;
-        }
-
-        .records-table tr:hover {
-            background: #f8f9fa;
-        }
-
-        .location-info {
-            background: #e3f2fd;
-            padding: 15px;
-            border-radius: 10px;
-            margin: 15px 0;
-        }
-
-        .dashboard-stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-
-        .stat-card {
-            background: white;
-            padding: 20px;
-            border-radius: 15px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-            text-align: center;
-        }
-
-        .stat-number {
-            font-size: 32px;
-            font-weight: bold;
-            color: #4facfe;
-        }
-
-        .stat-label {
-            color: #666;
-            margin-top: 10px;
-        }
-
-        .hidden {
-            display: none !important;
-        }
-
-        .alert {
-            padding: 12px;
-            margin: 10px 0;
-            border-radius: 8px;
-            font-weight: bold;
-        }
-
-        .alert-success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-
-        .alert-error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-
-        .alert-info {
-            background: #d1ecf1;
-            color: #0c5460;
-            border: 1px solid #bee5eb;
-        }
-
-        .alert-warning {
-            background: #fff3cd;
-            color: #856404;
-            border: 1px solid #ffeaa7;
-        }
-
-        .alert:disabled {
-            background: #e9ecef;
-            color: #6c757d;
-            cursor: not-allowed;
-        }
-
-        @media (max-width: 768px) {
-            .container {
-                width: 95%;
-                margin: 10px;
-            }
-            
-            .nav-tabs {
-                flex-direction: column;
-            }
-            
-            .dashboard-stats {
-                grid-template-columns: 1fr;
-            }
-            
-            .time-display {
-                font-size: 36px;
-            }
-        }
-
-        /* Admin specific styles */
-        .admin-section {
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 15px;
-            margin-top: 20px;
-        }
-        .admin-section h3 {
-            margin-bottom: 15px;
-            color: #333;
-        }
-        .admin-section .form-group {
-            margin-bottom: 15px;
-        }
-        .admin-section .btn {
-            margin-right: 10px;
-        }
-        .admin-table-container {
-            max-height: 400px;
-            overflow-y: auto;
-            margin-top: 20px;
-        }
-
-        /* Chat box styles */
-        #chatContainer {
-            border: 1px solid #ccc;
-            padding: 10px;
-            max-height: 300px;
-            overflow-y: auto;
-            background: #f8f9fa;
-            border-radius: 8px;
-            margin-bottom: 10px;
-        }
-        #chatMessages div {
-            margin-bottom: 8px;
-            padding: 5px;
-            border-radius: 5px;
-            background: #fff;
-        }
-        #chatInputBox {
-            display: flex;
-            gap: 10px;
-        }
-        #chatInput {
-            flex: 1;
-            padding: 8px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-        }
-        #onlineUsers {
-            margin-top: 15px;
-            padding: 10px;
-            background: #e9ecef;
-            border-radius: 8px;
-        }
-        #onlineUsers h4 {
-            margin-bottom: 5px;
-            color: #333;
-        }
-        #onlineUsersList {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-        #onlineUsersList li {
-            padding: 3px 0;
-            color: #555;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>Employee Attendance Management System</h1>
-            <p>Track attendance, manage leaves, monitor locations, chat in-house, handle week-offs & holidays</p>
-        </div>
-
-        <!-- Login Section -->
-        <div id="loginSection">
-            <div class="tab-content">
-                <div class="login-form">
-                    <h2 style="text-align: center; margin-bottom: 30px;">Login</h2>
-                    <div class="form-group">
-                        <label>Employee ID / Admin ID:</label>
-                        <input type="text" id="employeeId" placeholder="Enter your ID">
-                    </div>
-                    <div class="form-group">
-                        <label>Password:</label>
-                        <input type="password" id="password" placeholder="Enter your password">
-                    </div>
-                    <div class="form-group">
-                        <button class="btn" style="width: 100%;" onclick="login()">Login</button>
-                    </div>
-                    <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; font-size: 12px;">
-                        <strong>Demo Credentials:</strong><br>
-                        <strong>Admin:</strong> ADMIN / admin123<br>
-                        <strong>Employees:</strong><br>
-                        - EMP001 / password123<br>
-                        - EMP002 / pass456<br>
-                        - EMP003 / mike789
-                    </div>
-                    <div id="loginMessage"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Main Application -->
-        <div id="mainApp" class="hidden">
-            <div class="nav-tabs">
-                <button class="nav-tab active" onclick="showTab('dashboard')">Dashboard</button>
-                <button class="nav-tab" onclick="showTab('attendance')">Mark Attendance</button>
-                <button class="nav-tab" onclick="showTab('leave')">Leave Management</button>
-                <button class="nav-tab" onclick="showTab('records')">My Records</button>
-                <button class="nav-tab hidden" id="adminTab" onclick="showTab('admin')">Admin Panel</button>
-                <button class="nav-tab" onclick="showTab('chat')">In-House Chat</button>
-                <button class="nav-tab" onclick="logout()" style="margin-left: auto; background: #ff6b6b; color: white;">Logout</button>
-            </div>
-
-            <!-- Dashboard Tab -->
-            <div id="dashboard" class="tab-pane active">
-                <h2>Welcome, <span id="employeeName">Employee</span></h2>
-                <div class="dashboard-stats">
-                    <div class="stat-card">
-                        <div class="stat-number" id="totalDays">0</div>
-                        <div class="stat-label">Days This Month</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number" id="presentDays">0</div>
-                        <div class="stat-label">Present Days</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number" id="leaveDays">0</div>
-                        <div class="stat-label">Leave Days</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number" id="lateMarks">0</div>
-                        <div class="stat-label">Late Marks</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number" id="halfDays">0</div>
-                        <div class="stat-label">Half Days</div>
-                    </div>
-                </div>
-                <div id="todayMessage" class="alert alert-info"></div>
-                <div class="attendance-card">
-                    <div class="time-display" id="currentTime"></div>
-                    <div id="currentStatus"></div>
-                    <div id="locationDisplay" class="location-info"></div>
-                </div>
-            </div>
-
-            <!-- Attendance Tab -->
-            <div id="attendance" class="tab-pane">
-                <h2>Mark Attendance</h2>
-                <div id="attendanceAlert"></div>
-                <div class="attendance-card">
-                    <div class="time-display" id="attendanceTime"></div>
-                    <div id="attendanceStatus"></div>
-                    <div style="margin: 20px 0;">
-                        <button class="btn btn-success" id="checkInBtn" onclick="checkIn()">Check In</button>
-                        <button class="btn btn-danger" id="checkOutBtn" onclick="checkOut()">Check Out</button>
-                    </div>
-                    <div id="locationInfo" class="location-info"></div>
-                    <div id="attendanceMessage"></div>
-                </div>
-            </div>
-
-            <!-- Leave Management Tab -->
-            <div id="leave" class="tab-pane">
-                <h2>Leave Management</h2>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 20px;">
-                    <div>
-                        <h3>Apply for Leave</h3>
-                        <div class="form-group">
-                            <label>Leave Type:</label>
-                            <select id="leaveType">
-                                <option value="sick">Sick Leave</option>
-                                <option value="casual">Casual Leave</option>
-                                <option value="annual">Annual Leave</option>
-                                <option value="emergency">Emergency Leave</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>From Date:</label>
-                            <input type="date" id="fromDate">
-                        </div>
-                        <div class="form-group">
-                            <label>To Date:</label>
-                            <input type="date" id="toDate">
-                        </div>
-                        <div class="form-group">
-                            <label>Reason:</label>
-                            <textarea id="leaveReason" rows="4" placeholder="Enter reason for leave"></textarea>
-                        </div>
-                        <button class="btn" onclick="submitLeave()">Submit Leave Request</button>
-                        <div id="leaveMessage"></div>
-                    </div>
-                    <div>
-                        <h3>Leave Balance</h3>
-                        <div class="stat-card">
-                            <div class="stat-number">12</div>
-                            <div class="stat-label">Sick Leave Remaining</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-number">18</div>
-                            <div class="stat-label">Casual Leave Remaining</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-number">25</div>
-                            <div class="stat-label">Annual Leave Remaining</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Records Tab -->
-            <div id="records" class="tab-pane">
-                <h2>My Records</h2>
-                <div style="margin: 20px 0;">
-                    <button class="btn" onclick="showAttendanceRecords()">Attendance Records</button>
-                    <button class="btn" onclick="showLeaveRecords()">Leave Records</button>
-                </div>
-                <div id="recordsContent"></div>
-            </div>
-
-            <!-- Chat Tab -->
-            <div id="chat" class="tab-pane">
-                <h2>In-House Chat</h2>
-                <div id="chatContainer">
-                    <div id="chatMessages"></div>
-                </div>
-                <div id="chatInputBox">
-                    <input type="text" id="chatInput" placeholder="Type a message..." onkeypress="handleEnter(event)">
-                    <button class="btn" onclick="sendMessage()">Send</button>
-                </div>
-                <div id="onlineUsers">
-                    <h4>Online Employees:</h4>
-                    <ul id="onlineUsersList">
-                        <!-- Online users will be listed here -->
-                    </ul>
-                </div>
-            </div>
-
-            <!-- Admin Panel Tab -->
-            <div id="admin" class="tab-pane">
-                <h2>Admin Panel</h2>
-                <div class="admin-section">
-                    <h3>Manage Employees</h3>
-                    <div class="form-group">
-                        <label>Employee ID:</label>
-                        <input type="text" id="newEmployeeId" placeholder="e.g., EMP004">
-                    </div>
-                    <div class="form-group">
-                        <label>Employee Name:</label>
-                        <input type="text" id="newEmployeeName" placeholder="e.g., Alice Brown">
-                    </div>
-                    <div class="form-group">
-                        <label>Password:</label>
-                        <input type="password" id="newEmployeePassword" placeholder="Set initial password">
-                    </div>
-                    <button class="btn btn-success" onclick="addEmployee()">Add Employee</button>
-                    <button class="btn btn-danger" onclick="deleteEmployee()">Delete Employee</button>
-                    <div id="employeeManagementMessage"></div>
-                </div>
-
-                <div class="admin-section">
-                    <h3>View All Attendance Records</h3>
-                    <div class="form-group">
-                        <label>Filter by Employee ID (optional):</label>
-                        <input type="text" id="filterEmployeeIdAttendance" onkeyup="viewAllAttendanceRecords()">
-                    </div>
-                    <button class="btn" onclick="viewAllAttendanceRecords()">Refresh Attendance</button>
-                    <div class="admin-table-container" id="allAttendanceRecords"></div>
-                </div>
-
-                <div class="admin-section">
-                    <h3>Manage Leave Requests</h3>
-                    <div class="form-group">
-                        <label>Filter by Employee ID (optional):</label>
-                        <input type="text" id="filterEmployeeIdLeave" onkeyup="viewAllLeaveRequests()">
-                    </div>
-                    <button class="btn" onclick="viewAllLeaveRequests()">Refresh Leave Requests</button>
-                    <div class="admin-table-container" id="allLeaveRequests"></div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // Google Apps Script Web App URL - REPLACE with your actual deployed URL
-        const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbyRknG_wdTIeDxruuugJteOgwN_ly6j9DPxD1PQgOLjbQxJxqadSrafQ8FziS9mDzGONA/exec'; // Replace here
-
-        // Firebase Config - REPLACE with your actual config from Firebase console
-        const firebaseConfig = {
-            apiKey: "YOUR_API_KEY", // Replace
-            authDomain: "YOUR_PROJECT.firebaseapp.com", // Replace
-            databaseURL: "https://YOUR_PROJECT.firebaseio.com", // Replace
-            projectId: "YOUR_PROJECT", // Replace
-            storageBucket: "YOUR_PROJECT.appspot.com", // Replace
-            messagingSenderId: "SENDER_ID", // Replace
-            appId: "APP_ID" // Replace
-        };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
-
-        // Holiday and Week Off Logic
-        const holidays = ['2024-12-25', '2025-01-01', '2025-08-15']; // Add more dates as YYYY-MM-DD
-
-        function isSunday(date) {
-            return date.getDay() === 0;
-        }
-
-        function isHoliday(date) {
-            const dStr = date.toISOString().slice(0, 10);
-            return holidays.includes(dStr);
-        }
-
-        function isNonWorkingDay(date) {
-            return isSunday(date) || isHoliday(date);
-        }
-
-        function getNonWorkingMessage(date) {
-            if (isHoliday(date)) return "Today is a holiday.";
-            if (isSunday(date)) return "Today is week-off (Sunday).";
-            return null;
-        }
-
-        // Sample employee data and other data as before
-        let employees = {
-            'ADMIN': { name: 'Administrator', password: 'admin123', isAdmin: true },
-            'EMP001': { name: 'John Doe', password: 'password123' },
-            'EMP002': { name: 'Jane Smith', password: 'pass456' },
-            'EMP003': { name: 'Mike Johnson', password: 'mike789' }
-        };
-        let attendanceData = {};
-        let leaveData = {};
-        let currentEmployee = null;
-        let userLocation = null;
-
-        // Firebase references for presence
-        const presenceRef = db.ref('presence');
-        let userRef = null;
-
-        // Initialize
-        document.addEventListener('DOMContentLoaded', function() {
-            updateTime();
-            setInterval(updateTime, 1000);
-            getCurrentLocation();
-            loadDataFromSheets().then(() => updateDashboard());
-            updateAttendanceButtons();
-            // Load chat
-            db.ref('chat').on('child_added', snapshot => loadChatMessage(snapshot.val()));
-            // Listen for presence changes
-            presenceRef.on('value', snapshot => {
-                updateOnlineUsers(snapshot.val());
-            });
+  const filteredRoutes = useMemo(() => {
+    return DATA.routes
+      .filter(r => !selectedRoute || r.id === selectedRoute)
+      .map(r => {
+        const computedDates = computeDatesForRoute(r, effectiveYear);
+        const filteredDates = computedDates.filter(d => {
+          if (onlyFullMoon && !d.isFullMoon) return false;
+          const monthName = d.date.toLocaleDateString('en-US', { month: 'long' });
+          if (selectedMonth && monthName !== selectedMonth) return false;
+          if (searchTerm && !d.formatted.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+          return true;
         });
+        return { ...r, computedDates, filteredDates };
+      });
+  }, [effectiveYear, selectedRoute, selectedMonth, searchTerm, onlyFullMoon]);
 
-        // Time and Location Updates
-        function updateTime() {
-            const now = new Date();
-            const timeString = now.toLocaleTimeString();
-            document.getElementById('currentTime').textContent = timeString;
-            document.getElementById('attendanceTime').textContent = timeString;
-        }
+  const handleExportCSV = () => {
+    const allFiltered = filteredRoutes.flatMap(r =>
+      r.filteredDates.map(d => ({
+        Route: r.title,
+        Date: d.formatted,
+        Weekday: d.weekday,
+        'Full Moon': d.isFullMoon ? 'Yes' : 'No',
+        'Seats Left': '15', // TODO: Customize seats (e.g., dynamic from API or data)
+        Price: '$2,500' // TODO: Customize prices (e.g., per route/date)
+      }))
+    );
+    if (allFiltered.length === 0) {
+      console.warn('No departures to export');
+      return;
+    }
+    downloadCSV(allFiltered, `kailash_departures_${effectiveYear}.csv`);
+  };
 
-        function getCurrentLocation() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    pos => {
-                        userLocation = {
-                            latitude: pos.coords.latitude,
-                            longitude: pos.coords.longitude,
-                            accuracy: pos.coords.accuracy
-                        };
-                        updateLocationDisplays();
-                    },
-                    () => {
-                        userLocation = { error: 'Unavailable' };
-                        updateLocationDisplays();
-                    }
-                );
-            } else {
-                userLocation = { error: 'Geolocation not supported' };
-                updateLocationDisplays();
-            }
-        }
+  const handleBook = dateObj => {
+    onBook?.(dateObj);
+  };
 
-        function updateLocationDisplays() {
-            const display = userLocation && !userLocation.error ? `Lat: ${userLocation.latitude.toFixed(4)}, Long: ${userLocation.longitude.toFixed(4)}, Accuracy: ${userLocation.accuracy}m` : 'Location unavailable';
-            ['locationDisplay', 'locationInfo'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) el.innerHTML = `<strong>Location:</strong> ${display}`;
-            });
-        }
+  return (
+    <div className="container mx-auto p-4 max-w-7xl">
+      <h1 className="text-3xl font-bold mb-6 text-center sm:text-left">Kailash Mansarovar Departure Schedules</h1>
+      <div className="flex flex-wrap items-center gap-4 mb-6 bg-gray-50 p-4 rounded-lg">
+        <select
+          value={selectedRoute}
+          onChange={e => setSelectedRoute(e.target.value)}
+          className="border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+          aria-label="Filter by route"
+        >
+          <option value="">All Routes</option>
+          {DATA.routes.map(r => (
+            <option key={r.id} value={r.id}>
+              {r.title.split(' (')[0].trim()}
+            </option>
+          ))}
+        </select>
+        <select
+          value={selectedMonth}
+          onChange={e => setSelectedMonth(e.target.value)}
+          className="border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+          aria-label="Filter by month"
+        >
+          <option value="">All Months</option>
+          {allMonths.map(m => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </select>
+        <input
+          type="text"
+          placeholder="Search dates..."
+          value={searchTerm}
+          onChange={e => setSearchTerm(e.target.value)}
+          className="border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 flex-1 min-w-[200px]"
+          aria-label="Search departures"
+        />
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={onlyFullMoon}
+            onChange={e => setOnlyFullMoon(e.target.checked)}
+            className="rounded"
+          />
+          <span className="text-sm">Only Full-Moon</span>
+        </label>
+        <button
+          onClick={handleExportCSV}
+          className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 ml-auto"
+          aria-label="Export filtered departures to CSV"
+        >
+          Export CSV
+        </button>
+      </div>
+      {filteredRoutes.length === 0 ? (
+        <p className="text-center text-gray-500">No routes match the filters.</p>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {filteredRoutes.map(route => (
+            <section
+              key={route.id}
+              className="bg-white shadow-md rounded-lg p-6 border border-gray-200"
+              aria-labelledby={`route-title-${route.id}`}
+            >
+              <h2 id={`route-title-${route.id}`} className="text-xl font-semibold mb-2">
+                {route.title}
+              </h2>
+              <p className="text-gray-600 mb-4 text-sm">{route.duration}</p>
+              {route.filteredDates.length === 0 ? (
+                <p className="text-gray-500 text-center py-4">No departures match the filters.</p>
+              ) : (
+                <div role="list" className="space-y-4">
+                  {route.filteredDates.map(departure => (
+                    <article
+                      key={departure.iso}
+                      role="listitem"
+                      className="flex flex-col gap-3 p-3 bg-gray-50 rounded border"
+                    >
+                      <div className="flex-1">
+                        <div className="font-medium text-lg">{departure.formatted}</div>
+                        <div className="text-sm text-gray-500">{departure.weekday}</div>
+                        {departure.isFullMoon && (
+                          <span className="inline-flex items-center gap-1 mt-1" aria-label="Full Moon Departure">
+                            🌕 Full Moon Departure
+                          </span>
+                        )}
+                        {departure.fullMoonHint && !departure.isFullMoon && (
+                          <div className="text-xs text-gray-400 mt-1">{departure.fullMoonHint}</div>
+                        )}
+                      </div>
+                      <div className="flex flex-col sm:flex-row justify-between items-end gap-4">
+                        <div className="text-sm text-right sm:text-left">
+                          <div>Seats left: 15 {/* TODO: Customize seats placeholder */}</div>
+                          <div className="font-semibold text-green-600">$2,500 {/* TODO: Customize price placeholder */}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() =>
+                              downloadICS({
+                                summary: `Kailash Mansarovar - ${route.title} Departure`,
+                                start: departure.iso,
+                                details: `Departure: ${departure.formatted} (${departure.weekday})\nRoute: ${route.title}\nDuration: ${route.duration}\nFull Moon: ${departure.isFullMoon ? 'Yes' : 'No'}`
+                              })
+                            }
+                            className="p-2 hover:bg-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            aria-label="Download ICS calendar invite"
+                            title="Download ICS"
+                          >
+                            📅
+                          </button>
+                          <button
+                            onClick={() =>
+                              openGoogleCalendar({
+                                summary: `Kailash Mansarovar - ${route.title} Departure`,
+                                start: departure.iso,
+                                details: `Departure: ${departure.formatted} (${departure.weekday})\nRoute: ${route.title}\nDuration: ${route.duration}\nFull Moon: ${departure.isFullMoon ? 'Yes' : 'No'}`
+                              })
+                            }
+                            className="p-2 hover:bg-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            aria-label="Add to Google Calendar"
+                            title="Add to Google Calendar"
+                          >
+                            🔗
+                          </button>
+                          <button
+                            onClick={() =>
+                              handleBook({
+                                iso: departure.iso,
+                                date: departure.formatted,
+                                weekday: departure.weekday,
+                                route: route.title,
+                                duration: route.duration,
+                                isFullMoon: departure.isFullMoon
+                              })
+                            }
+                            className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 text-sm font-medium"
+                          >
+                            Book Now
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
-        // Data Loading from Google Sheets
-        async function loadDataFromSheets() {
-            try {
-                const empRes = await fetch(`${WEB_APP_URL}?action=getEmployees`);
-                employees = await empRes.json();
-                const attRes = await fetch(`${WEB_APP_URL}?action=getAttendance`);
-                attendanceData = await attRes.json();
-                const leaveRes = await fetch(`${WEB_APP_URL}?action=getLeaves`);
-                leaveData = await leaveRes.json();
-            } catch (e) {
-                console.error('Error loading data:', e);
-            }
-        }
+export default KailashSchedule;
 
-        // Save to Google Sheets Function
-        async function saveToSheets(data, action) {
-            try {
-                await fetch(WEB_APP_URL, {
-                    method: 'POST',
-                    body: JSON.stringify({ action: action, data: data }),
-                    headers: { 'Content-Type': 'application/json' }
-                });
-            } catch (e) {
-                console.error('Error saving:', e);
-            }
-        }
-
-        function login() {
-            const empId = document.getElementById('employeeId').value.toUpperCase();
-            const password = document.getElementById('password').value;
-            const messageDiv = document.getElementById('loginMessage');
-
-            if (!empId || !password) {
-                messageDiv.innerHTML = '<div class="alert alert-error">Please enter ID and Password</div>';
-                return;
-            }
-
-            if (employees[empId] && employees[empId].password === password) {
-                currentEmployee = empId;
-                document.getElementById('employeeName').textContent = employees[empId].name;
-                document.getElementById('loginSection').classList.add('hidden');
-                document.getElementById('mainApp').classList.remove('hidden');
-                messageDiv.innerHTML = '';
-                if (employees[empId].isAdmin) {
-                    document.getElementById('adminTab').classList.remove('hidden');
-                }
-                updateDashboard();
-                updateAttendanceButtons();
-
-                // Set user presence in Firebase
-                userRef = presenceRef.child(currentEmployee);
-                userRef.set({
-                    name: employees[currentEmployee].name,
-                    status: 'online',
-                    last_seen: firebase.database.ServerValue.TIMESTAMP
-                });
-                userRef.onDisconnect().remove(); // Remove user from presence when they disconnect
-
-            } else {
-                messageDiv.innerHTML = '<div class="alert alert-error">Invalid credentials</div>';
-            }
-        }
-
-        function logout() {
-            if (userRef) {
-                userRef.remove(); // Remove user from presence when they log out
-            }
-            currentEmployee = null;
-            document.getElementById('loginSection').classList.remove('hidden');
-            document.getElementById('mainApp').classList.add('hidden');
-            document.getElementById('employeeId').value = '';
-            document.getElementById('password').value = '';
-            document.getElementById('adminTab').classList.add('hidden');
-        }
-
-        function showTab(tabName) {
-            document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-            document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-            document.getElementById(tabName).classList.add('active');
-            document.querySelector(`.nav-tab[onclick="showTab('${tabName}')"]`).classList.add('active');
-            if (tabName === 'admin') {
-                viewAllAttendanceRecords();
-                viewAllLeaveRequests();
-            }
-        }
-
-        // Attendance Functions
-        async function checkIn() {
-            const now = new Date();
-            const today = now.toDateString();
-            if (isNonWorkingDay(now)) {
-                document.getElementById('attendanceMessage').innerHTML = `<div class="alert alert-info">${getNonWorkingMessage(now)}</div>`;
-                return;
-            }
-            if (!attendanceData[currentEmployee]) attendanceData[currentEmployee] = {};
-            if (attendanceData[currentEmployee][today]?.checkIn) {
-                document.getElementById('attendanceMessage').innerHTML = '<div class="alert alert-error">Already checked in today!</div>';
-                return;
-            }
-            const isLate = now.getHours() > 9;
-            attendanceData[currentEmployee][today] = {
-                checkIn: now.toLocaleTimeString(),
-                isLate: isLate,
-                isHalfDay: false,
-                date: today,
-                status: 'Checked In',
-                checkInLocation: userLocation ? {
-                    lat: userLocation.latitude,
-                    long: userLocation.longitude,
-                    accuracy: userLocation.accuracy
-                } : null
-            };
-            await saveToSheets(attendanceData[currentEmployee][today], 'addAttendance');
-            document.getElementById('attendanceMessage').innerHTML = '<div class="alert alert-success">Checked in successfully!</div>';
-            updateAttendanceStatus();
-            updateDashboard();
-        }
-
-        async function checkOut() {
-            const now = new Date();
-            const today = now.toDateString();
-            if (isNonWorkingDay(now)) {
-                document.getElementById('attendanceMessage').innerHTML = `<div class="alert alert-info">${getNonWorkingMessage(now)}</div>`;
-                return;
-            }
-            if (!attendanceData[currentEmployee][today]?.checkIn) {
-                document.getElementById('attendanceMessage').innerHTML = '<div class="alert alert-error">Please check in first!</div>';
-                return;
-            }
-            if (attendanceData[currentEmployee][today].checkOut) {
-                document.getElementById('attendanceMessage').innerHTML = '<div class="alert alert-error">Already checked out today!</div>';
-                return;
-            }
-            const checkInTime = new Date(attendanceData[currentEmployee][today].date + ' ' + attendanceData[currentEmployee][today].checkIn);
-            const hoursWorked = (now - checkInTime) / (1000 * 60 * 60);
-            if (hoursWorked < 4) {
-                attendanceData[currentEmployee][today].isHalfDay = true;
-                attendanceData[currentEmployee][today].status = 'Half Day';
-            } else if (hoursWorked < 8) {
-                attendanceData[currentEmployee][today].status = 'Short Day';
-            } else {
-                attendanceData[currentEmployee][today].status = 'Full Day';
-            }
-            attendanceData[currentEmployee][today].checkOut = now.toLocaleTimeString();
-            attendanceData[currentEmployee][today].checkOutLocation = userLocation ? {
-                lat: userLocation.latitude,
-                long: userLocation.longitude,
-                accuracy: userLocation.accuracy
-            } : null;
-            await saveToSheets(attendanceData[currentEmployee][today], 'addAttendance');
-            document.getElementById('attendanceMessage').innerHTML = '<div class="alert alert-success">Checked out successfully!</div>';
-            updateAttendanceStatus();
-            updateDashboard();
-        }
-
-        function updateAttendanceStatus() {
-            const today = new Date().toDateString();
-            const record = attendanceData[currentEmployee]?.[today];
-            let statusHtml = '<span class="status">Not Marked</span>';
-            if (record) {
-                if (record.checkIn && !record.checkOut) {
-                    statusHtml = '<span class="status checked-in">Checked In</span>';
-                } else if (record.checkOut) {
-                    statusHtml = `<span class="status checked-out">${record.status}</span>`;
-                }
-                if (record.isLate) statusHtml += '<span class="status">Late</span>';
-                if (record.isHalfDay) statusHtml += '<span class="status">Half Day</span>';
-            }
-            document.getElementById('currentStatus').innerHTML = statusHtml;
-            document.getElementById('attendanceStatus').innerHTML = statusHtml;
-        }
-
-        function updateAttendanceButtons() {
-            const now = new Date();
-            const isOff = isNonWorkingDay(now);
-            const checkInBtn = document.getElementById('checkInBtn');
-            const checkOutBtn = document.getElementById('checkOutBtn');
-            checkInBtn.disabled = isOff;
-            checkOutBtn.disabled = isOff;
-            const alertDiv = document.getElementById('attendanceAlert');
-            if (isOff) {
-                alertDiv.innerHTML = `<div class="alert alert-warning">${getNonWorkingMessage(now)} Attendance marking is disabled.</div>`;
-                alertDiv.style.display = 'block';
-            } else {
-                alertDiv.style.display = 'none';
-            }
-        }
-
-        // Other functions for leave, records, admin, dashboard as per previous code, with updates for weekends/holidays and vice versa
-        async function submitLeave() {
-            const type = document.getElementById('leaveType').value;
-            const fromDate = document.getElementById('fromDate').value;
-            const toDate = document.getElementById('toDate').value;
-            const reason = document.getElementById('leaveReason').value;
-            if (!fromDate || !toDate || !reason) {
-                document.getElementById('leaveMessage').innerHTML = '<div class="alert alert-error">Fill all fields</div>';
-                return;
-            }
-            if (new Date(fromDate) > new Date(toDate)) {
-                document.getElementById('leaveMessage').innerHTML = '<div class="alert alert-error">Invalid dates</div>';
-                return;
-            }
-            const leave = { empId: currentEmployee, type, fromDate, toDate, reason, status: 'Pending' };
-            if (!leaveData[currentEmployee]) leaveData[currentEmployee] = [];
-            leaveData[currentEmployee].push(leave);
-            await saveToSheets(leave, 'addLeave');
-            document.getElementById('leaveMessage').innerHTML = '<div class="alert alert-success">Leave submitted!</div>';
-            document.getElementById('leaveReason').value = '';
-            document.getElementById('fromDate').value = '';
-            document.getElementById('toDate').value = '';
-            updateDashboard();
-        }
-
-        function updateDashboard() {
-            const currentMonth = new Date().getMonth();
-            const currentYear = new Date().getFullYear();
-            let present = 0, late = 0, half = 0, leaveDays = 0;
-            Object.values(attendanceData[currentEmployee] || {}).forEach(r => {
-                const d = new Date(r.date);
-                if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
-                    if (isNonWorkingDay(d)) {
-                        r.status = getNonWorkingMessage(d);
-                    } else if (r.checkOut) {
-                        present++;
-                    }
-                    if (r.isLate) late++;
-                    if (r.isHalfDay) half++;
-                }
-            });
-            (leaveData[currentEmployee] || []).forEach(l => {
-                if (l.status === 'Approved') leaveDays++;
-            });
-            document.getElementById('totalDays').textContent = present;
-            document.getElementById('presentDays').textContent = present - half;
-            document.getElementById('lateMarks').textContent = late;
-            document.getElementById('halfDays').textContent = half;
-            document.getElementById('leaveDays').textContent = leaveDays;
-            updateAttendanceStatus();
-            const today = new Date();
-            const msg = getNonWorkingMessage(today);
-            const todayMessageDiv = document.getElementById('todayMessage');
-            if (msg) {
-                todayMessageDiv.innerHTML = msg;
-                todayMessageDiv.classList.remove('hidden');
-            } else {
-                todayMessageDiv.classList.add('hidden');
-            }
-        }
-
-        function showAttendanceRecords() {
-            let html = '<h3>Attendance Records</h3><table class="records-table"><thead><tr><th>Date</th><th>Check In</th><th>Check Out</th><th>Late</th><th>Half Day</th><th>Status</th></tr></thead><tbody>';
-            Object.values(attendanceData[currentEmployee] || {}).forEach(r => {
-                html += `<tr><td>${r.date}</td><td>${r.checkIn || '-'}</td><td>${r.checkOut || '-'}</td><td>${r.isLate ? 'Yes' : 'No'}</td><td>${r.isHalfDay ? 'Yes' : 'No'}</td><td>${r.status || '-'}</td></tr>`;
-            });
-            html += '</tbody></table>';
-            document.getElementById('recordsContent').innerHTML = html;
-        }
-
-        function showLeaveRecords() {
-            let html = '<h3>Leave Records</h3><table class="records-table"><thead><tr><th>Type</th><th>From</th><th>To</th><th>Reason</th><th>Status</th></tr></thead><tbody>';
-            (leaveData[currentEmployee] || []).forEach(l => {
-                html += `<tr><td>${l.type}</td><td>${l.fromDate}</td><td>${l.toDate}</td><td>${l.reason}</td><td>${l.status}</td></tr>`;
-            });
-            html += '</tbody></table>';
-            document.getElementById('recordsContent').innerHTML = html;
-        }
-
-        // Chat Functions
-        function sendMessage() {
-            const msgInput = document.getElementById('chatInput');
-            const message = msgInput.value.trim();
-            if (!message) return;
-            const chatRef = db.ref('chat');
-            chatRef.push({
-                empId: currentEmployee,
-                sender: employees[currentEmployee]?.name || currentEmployee,
-                message: message,
-                timestamp: Date.now()
-            });
-            msgInput.value = '';
-        }
-
-        function handleEnter(e) {
-            if (e.key === 'Enter') sendMessage();
-        }
-
-        function loadChatMessage(msg) {
-            const time = new Date(msg.timestamp).toLocaleTimeString();
-            const msgDiv = document.createElement('div');
-            msgDiv.textContent = `[${time}] ${msg.sender}: ${msg.message}`;
-            document.getElementById('chatMessages').appendChild(msgDiv);
-            document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
-        }
-
-        function updateOnlineUsers(presenceData) {
-            const onlineUsersList = document.getElementById('onlineUsersList');
-            onlineUsersList.innerHTML = ''; // Clear existing list
-
-            if (presenceData) {
-                Object.keys(presenceData).forEach(empId => {
-                    const user = presenceData[empId];
-                    const listItem = document.createElement('li');
-                    listItem.textContent = user.name;
-                    onlineUsersList.appendChild(listItem);
-                });
-            }
-        }
-
-        // Admin Functions
-        async function addEmployee() {
-            const empId = document.getElementById('newEmployeeId').value.toUpperCase();
-            const name = document.getElementById('newEmployeeName').value;
-            const pass = document.getElementById('newEmployeePassword').value;
-            if (!empId || !name || !pass) {
-                document.getElementById('employeeManagementMessage').innerHTML = '<div class="alert alert-error">All fields required</div>';
-                return;
-            }
-            employees[empId] = { name, password: pass, isAdmin: false };
-            await saveToSheets({ empId, name, password: pass, isAdmin: false }, 'addEmployee');
-            document.getElementById('employeeManagementMessage').innerHTML = '<div class="alert alert-success">Employee added!</div>';
-        }
-
-        async function deleteEmployee() {
-            const empId = document.getElementById('newEmployeeId').value.toUpperCase();
-            if (!empId || !employees[empId]) {
-                document.getElementById('employeeManagementMessage').innerHTML = '<div class="alert alert-error">ID required or not found</div>';
-                return;
-            }
-            if (empId === 'ADMIN') {
-                document.getElementById('employeeManagementMessage').innerHTML = '<div class="alert alert-error">Cannot delete ADMIN</div>';
-                return;
-            }
-            if (confirm(`Delete ${employees[empId].name}?`)) {
-                delete employees[empId];
-                delete attendanceData[empId];
-                delete leaveData[empId];
-                // You may need to update Apps Script for deletion
-                document.getElementById('employeeManagementMessage').innerHTML = '<div class="alert alert-success">Employee deleted!</div>';
-            }
-        }
-
-        async function viewAllAttendanceRecords() {
-            await loadDataFromSheets();
-            let html = '<table class="records-table"><thead><tr><th>EmpID</th><th>Name</th><th>Date</th><th>Check In</th><th>Check Out</th><th>Late</th><th>Half Day</th><th>Status</th><th>Check-In Lat</th><th>Check-In Long</th><th>Check-In Accuracy (m)</th><th>Check-Out Lat</th><th>Check-Out Long</th><th>Check-Out Accuracy (m)</th></tr></thead><tbody>';
-            const filter = document.getElementById('filterEmployeeIdAttendance').value.toUpperCase();
-            Object.keys(attendanceData).forEach(id => {
-                if (filter && id !== filter) return;
-                Object.values(attendanceData[id]).forEach(r => {
-                    const checkInLoc = r.checkInLocation || {};
-                    const checkOutLoc = r.checkOutLocation || {};
-                    html += `<tr><td>${id}</td><td>${employees[id]?.name || 'Unknown'}</td><td>${r.date}</td><td>${r.checkIn || '-'}</td><td>${r.checkOut || '-'}</td><td>${r.isLate ? 'Yes' : 'No'}</td><td>${r.isHalfDay ? 'Yes' : 'No'}</td><td>${r.status || '-'}</td><td>${checkInLoc.lat || '-'}</td><td>${checkInLoc.long || '-'}</td><td>${checkInLoc.accuracy || '-'}</td><td>${checkOutLoc.lat || '-'}</td><td>${checkOutLoc.long || '-'}</td><td>${checkOutLoc.accuracy || '-'}</td></tr>`;
-                });
-            });
-            html += '</tbody></table>';
-            document.getElementById('allAttendanceRecords').innerHTML = html;
-        }
-
-        async function viewAllLeaveRequests() {
-            await loadDataFromSheets();
-            let html = '<table class="records-table"><thead><tr><th>EmpID</th><th>Name</th><th>Type</th><th>From</th><th>To</th><th>Reason</th><th>Status</th><th>Action</th></tr></thead><tbody>';
-            const filter = document.getElementById('filterEmployeeIdLeave').value.toUpperCase();
-            Object.keys(leaveData).forEach(id => {
-                if (filter && id !== filter) return;
-                leaveData[id].forEach((l, idx) => {
-                    const statusC = l.status === 'Approved' ? 'alert-success' : (l.status === 'Rejected' ? 'alert-error' : 'alert-info');
-                    html += `<tr><td>${id}</td><td>${employees[id]?.name || 'Unknown'}</td><td>${l.type}</td><td>${l.fromDate}</td><td>${l.toDate}</td><td>${l.reason}</td><td class="${statusC}">${l.status}</td><td>${l.status === 'Pending' ? `<button class="btn btn-success" onclick="updateLeaveStatus('${id}', ${idx}, 'Approved')">Approve</button><button class="btn btn-danger" onclick="updateLeaveStatus('${id}', ${idx}, 'Rejected')">Reject</button>` : '-'}</td></tr>`;
-                });
-            });
-            html += '</tbody></table>';
-            document.getElementById('allLeaveRequests').innerHTML = html;
-        }
-
-        async function updateLeaveStatus(empId, index, status) {
-            leaveData[empId][index].status = status;
-            await saveToSheets(leaveData[empId][index], 'addLeave'); // Assume update
-            viewAllLeaveRequests();
-            updateDashboard();
-        }
-    </script>
-</body>
-</html>
-
-
-
-
-
+/*
+Example usage:
+<KailashSchedule year={2026} onBook={(dateObj) => console.log('Book:', dateObj)} />
+*/
+```
